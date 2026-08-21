@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'" />
+  <title>miTasks</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="collapsed style-pet">
+
+  <!-- Collapsed bubble: pet (or count dial) inside a progress arc -->
+  <button id="bubble" class="pet-alert" aria-label="Open tasks">
+    <svg id="bubble-arc" viewBox="0 0 62 62" width="62" height="62">
+      <circle class="arc-track" cx="31" cy="31" r="28" />
+      <circle class="arc-fill" id="arc-fill" cx="31" cy="31" r="28" />
+    </svg>
+
+    <!-- Pet cat -->
+    <svg id="pet" viewBox="0 0 62 62" width="62" height="62">
+      <path class="pet-fur" d="M19 25 L21 10 L31 17 Z" />
+      <path class="pet-fur" d="M43 25 L41 10 L31 17 Z" />
+      <path class="pet-inner-ear" d="M21.8 20.5 L22.8 13.8 L27.4 16.8 Z" />
+      <path class="pet-inner-ear" d="M40.2 20.5 L39.2 13.8 L34.6 16.8 Z" />
+      <circle class="pet-fur" cx="31" cy="34" r="15.5" />
+      <g class="pet-eyes eyes-open">
+        <circle cx="25" cy="32" r="2.3" />
+        <circle cx="37" cy="32" r="2.3" />
+      </g>
+      <g class="pet-eyes eyes-happy">
+        <path d="M22.5 32.5 Q25 29.5 27.5 32.5" />
+        <path d="M34.5 32.5 Q37 29.5 39.5 32.5" />
+      </g>
+      <g class="pet-eyes eyes-focus">
+        <path d="M22.5 31.5 H27.5" />
+        <path d="M34.5 31.5 H39.5" />
+      </g>
+      <path class="pet-nose" d="M29.6 37 h2.8 l-1.4 1.9 z" />
+      <path class="pet-mouth" d="M31 39.2 Q29.5 41.2 27.5 40.4 M31 39.2 Q32.5 41.2 34.5 40.4" />
+      <g class="pet-whiskers">
+        <path d="M13.5 34.5 L20 34" />
+        <path d="M13.5 38.5 L20 37.2" />
+        <path d="M48.5 34.5 L42 34" />
+        <path d="M48.5 38.5 L42 37.2" />
+      </g>
+    </svg>
+
+    <span id="bubble-count">0</span>
+    <svg id="bubble-check" viewBox="0 0 24 24" width="22" height="22" fill="none"
+         stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" hidden>
+      <path d="M4 12.5l5 5L20 6.5" />
+    </svg>
+    <span id="bubble-badge" hidden>0</span>
+  </button>
+
+  <!-- Expanded panel -->
+  <div id="panel">
+    <header>
+      <div class="head-text">
+        <h1>miTasks</h1>
+        <p id="date-line"></p>
+      </div>
+      <div class="head-actions">
+        <button id="notes-btn" aria-label="Notes">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none"
+               stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 20h9" />
+            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+          </svg>
+        </button>
+        <button id="settings-btn" aria-label="Advanced settings">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none"
+               stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
+        <button id="collapse-btn" aria-label="Close panel">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <div id="progress-strip" hidden>
+      <div id="progress-track"><div id="progress-fill"></div></div>
+      <span id="progress-text">0 of 0</span>
+    </div>
+
+    <div id="focus-strip" hidden>
+      <span class="focus-dot"></span>
+      <span id="focus-task"></span>
+      <b id="focus-time">25:00</b>
+      <button id="focus-stop" aria-label="Stop focus session" title="Stop">
+        <svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor">
+          <rect x="6" y="6" width="12" height="12" rx="2" />
+        </svg>
+      </button>
+    </div>
+
+    <div class="quick-add">
+      <input id="task-input" type="text" placeholder="What needs doing?" autocomplete="off" spellcheck="false"
+             title="Try: send report tomorrow 3pm !high @azul · every monday" />
+      <button id="add-btn" aria-label="Add task">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none"
+             stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+      </button>
+    </div>
+
+    <div id="parse-hint" hidden></div>
+
+    <div id="chip-row"></div>
+
+    <div id="list-wrap">
+      <ul id="pending-list"></ul>
+
+      <div id="empty-state" hidden>
+        <p class="empty-title">All clear.</p>
+        <p class="empty-sub">Enjoy the quiet — or capture the next thing.</p>
+      </div>
+
+      <div id="done-block" hidden>
+        <div id="done-header">
+          <span>Done · <b id="done-count">0</b></span>
+          <button id="clear-done">Clear</button>
+        </div>
+        <ul id="done-list"></ul>
+      </div>
+    </div>
+
+    <!-- Notes: one card per topic you'll talk about -->
+    <div id="notes-view" hidden>
+      <div class="settings-head">
+        <button id="notes-back" aria-label="Back to tasks">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none"
+               stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+        </button>
+        <h2>Notes</h2>
+        <button id="note-new" class="copy-btn">New note</button>
+      </div>
+
+      <div class="settings-body">
+        <div id="notes-chips"></div>
+        <ul id="note-cards"></ul>
+        <p class="setting-note" id="notes-empty" hidden>
+          One card per topic — write everything you want to say about it.
+        </p>
+      </div>
+
+      <!-- Full-card editor -->
+      <div id="note-editor" hidden>
+        <div class="card-head">
+          <button id="editor-back" aria-label="Back to notes">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none"
+                 stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+          </button>
+          <span id="editor-scope"></span>
+          <button id="editor-copy" class="copy-btn">Copy</button>
+          <button id="editor-delete" aria-label="Delete note">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+            </svg>
+          </button>
+        </div>
+        <input id="editor-title" type="text" placeholder="Topic…" maxlength="120" spellcheck="false" />
+        <textarea id="editor-body" placeholder="Everything you want to say about it — context, numbers, what happened, what's next…"></textarea>
+      </div>
+    </div>
+
+    <!-- Advanced: insights + settings overlay -->
+    <div id="settings" hidden>
+      <div class="settings-head">
+        <button id="settings-back" aria-label="Back to tasks">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none"
+               stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+        </button>
+        <h2>Advanced</h2>
+      </div>
+
+      <div class="settings-body">
+        <section>
+          <h3>Insights</h3>
+          <div class="stat-grid">
+            <div class="stat"><b id="stat-today">0</b><span>Done today</span></div>
+            <div class="stat"><b id="stat-week">0</b><span>Past 7 days</span></div>
+            <div class="stat"><b id="stat-pending">0</b><span>Pending</span></div>
+            <div class="stat stat-warn"><b id="stat-overdue">0</b><span>Overdue</span></div>
+            <div class="stat"><b id="stat-focus-today">0m</b><span>Focused today</span></div>
+            <div class="stat"><b id="stat-focus-week">0m</b><span>Focused 7 days</span></div>
+          </div>
+          <div id="attention-block" hidden>
+            <h4>Needs attention</h4>
+            <ul id="attention-list"></ul>
+          </div>
+          <div id="focus-label-block" hidden>
+            <h4>Focus by label · 7 days</h4>
+            <ul id="focus-label-list"></ul>
+          </div>
+        </section>
+
+        <section>
+          <h3>Labels</h3>
+          <ul id="label-list"></ul>
+          <p class="setting-note label-note">Deleting a label keeps its tasks — they become unlabeled.</p>
+        </section>
+
+        <section>
+          <h3>Focus</h3>
+          <div class="setting-row">
+            <span class="setting-label">Length</span>
+            <input type="number" id="focus-minutes" min="5" max="120" step="5" />
+            <span class="setting-note">minutes per session</span>
+          </div>
+        </section>
+
+        <section>
+          <h3>Reminders</h3>
+          <div class="setting-row">
+            <span class="setting-label">Sound</span>
+            <select id="sound-select"></select>
+            <button id="sound-play" aria-label="Preview sound" title="Preview">
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
+                <path d="M6 4l14 8-14 8z" />
+              </svg>
+            </button>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">Deadlines</span>
+            <label class="toggle">
+              <input type="checkbox" id="deadline-toggle" />
+              <span class="switch"></span>
+            </label>
+            <input type="time" id="deadline-time" />
+            <span class="setting-note">on the deadline day</span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">Brief</span>
+            <label class="toggle">
+              <input type="checkbox" id="brief-toggle" />
+              <span class="switch"></span>
+            </label>
+            <input type="time" id="brief-time" />
+            <span class="setting-note">morning summary</span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">Review</span>
+            <label class="toggle">
+              <input type="checkbox" id="review-toggle" />
+              <span class="switch"></span>
+            </label>
+            <input type="time" id="review-time" />
+            <span class="setting-note">Fridays, week recap</span>
+          </div>
+        </section>
+
+        <section>
+          <h3>General</h3>
+          <div class="setting-row">
+            <span class="setting-label">Bubble</span>
+            <select id="bubble-style">
+              <option value="pet">Pet cat</option>
+              <option value="dial">Count dial</option>
+            </select>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">Menu bar</span>
+            <label class="toggle">
+              <input type="checkbox" id="menubar-toggle" />
+              <span class="switch"></span>
+            </label>
+            <span class="setting-note">pending count next to the clock</span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">Login</span>
+            <label class="toggle">
+              <input type="checkbox" id="login-checkbox" />
+              <span class="switch"></span>
+            </label>
+            <span class="setting-note">start miTasks automatically</span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">Toggle</span>
+            <span class="setting-note">⌘⇧Space opens and closes the widget</span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">Move</span>
+            <span class="setting-note">drag the pet, or drag this panel by its title</span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">Quit</span>
+            <button id="quit-btn">Quit miTasks</button>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div id="confetti-layer"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
