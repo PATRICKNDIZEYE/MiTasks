@@ -60,6 +60,14 @@
         <p id="date-line"></p>
       </div>
       <div class="head-actions">
+        <button id="lockin-btn" aria-label="Lock in" title="Lock in — keep this Mac awake">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none"
+               stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 9h13v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z" />
+            <path d="M17 10h1.6a2.4 2.4 0 0 1 0 4.8H17" />
+            <path d="M7.5 2.5v2.6M11 2v3.1M14.5 2.5v2.6" />
+          </svg>
+        </button>
         <button id="notes-btn" aria-label="Notes">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none"
                stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
@@ -99,6 +107,39 @@
       </button>
     </div>
 
+    <div id="lockin-strip" hidden>
+      <span class="lockin-dot"></span>
+      <span id="lockin-label">Locked in</span>
+      <b id="lockin-time">60:00</b>
+      <button id="lockin-plus" title="Add 15 minutes">+15</button>
+      <button id="lockin-stop" aria-label="End lock-in" title="End lock-in">
+        <svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor">
+          <rect x="6" y="6" width="12" height="12" rx="2" />
+        </svg>
+      </button>
+    </div>
+
+    <div id="lockin-menu" hidden>
+      <p class="lockin-menu-title">Keep this Mac awake for</p>
+      <div class="lockin-opts">
+        <button data-min="25">25m</button>
+        <button data-min="45">45m</button>
+        <button data-min="60">1h</button>
+        <button data-min="90">1½h</button>
+        <button data-min="120">2h</button>
+        <button data-min="180">3h</button>
+      </div>
+      <div class="lockin-custom">
+        <input id="lockin-custom-min" type="number" min="1" max="480" placeholder="minutes" />
+        <button id="lockin-custom-go">Start</button>
+      </div>
+      <label class="lockin-tie">
+        <input type="checkbox" id="lockin-focus-toggle" />
+        <span class="switch"></span>
+        <span class="lockin-tie-text">Stay awake during focus sessions</span>
+      </label>
+    </div>
+
     <div class="quick-add">
       <input id="task-input" type="text" placeholder="What needs doing?" autocomplete="off" spellcheck="false"
              title="Try: send report tomorrow 3pm !high @azul · every monday" />
@@ -113,6 +154,25 @@
     <div id="parse-hint" hidden></div>
 
     <div id="chip-row"></div>
+
+    <div id="agenda" hidden>
+      <div id="agenda-head">
+        <span id="agenda-title">Today</span>
+        <span id="agenda-free"></span>
+        <button id="agenda-collapse" aria-label="Collapse agenda">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none"
+               stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </button>
+      </div>
+      <ul id="agenda-list"></ul>
+    </div>
+
+    <div id="calendar-cta" hidden>
+      <p id="calendar-cta-text">See today's meetings alongside your tasks.</p>
+      <button id="calendar-connect">Connect Calendar</button>
+    </div>
 
     <div id="list-wrap">
       <ul id="pending-list"></ul>
@@ -198,6 +258,14 @@
             <div class="stat"><b id="stat-focus-today">0m</b><span>Focused today</span></div>
             <div class="stat"><b id="stat-focus-week">0m</b><span>Focused 7 days</span></div>
           </div>
+          <div id="aging-block" hidden>
+            <h4>Aging · nothing scheduled</h4>
+            <ul id="aging-list"></ul>
+          </div>
+          <div id="client-block" hidden>
+            <h4>By label</h4>
+            <ul id="client-list"></ul>
+          </div>
           <div id="attention-block" hidden>
             <h4>Needs attention</h4>
             <ul id="attention-list"></ul>
@@ -215,11 +283,24 @@
         </section>
 
         <section>
-          <h3>Focus</h3>
+          <h3>Focus &amp; lock-in</h3>
           <div class="setting-row">
             <span class="setting-label">Length</span>
             <input type="number" id="focus-minutes" min="5" max="120" step="5" />
             <span class="setting-note">minutes per session</span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">Lock-in</span>
+            <input type="number" id="lockin-minutes" min="1" max="480" step="5" />
+            <span class="setting-note">default minutes awake</span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">Tie-in</span>
+            <label class="toggle">
+              <input type="checkbox" id="lockin-with-focus" />
+              <span class="switch"></span>
+            </label>
+            <span class="setting-note">lock in whenever a focus session starts</span>
           </div>
         </section>
 
@@ -261,6 +342,55 @@
             <input type="time" id="review-time" />
             <span class="setting-note">Fridays, week recap</span>
           </div>
+          <div class="setting-row">
+            <span class="setting-label">Kickoff</span>
+            <label class="toggle">
+              <input type="checkbox" id="kickoff-toggle" />
+              <span class="switch"></span>
+            </label>
+            <input type="time" id="kickoff-time" />
+            <span class="setting-note">evening runway, when you actually work</span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">Meetings</span>
+            <label class="toggle">
+              <input type="checkbox" id="nudge-toggle" />
+              <span class="switch"></span>
+            </label>
+            <input type="number" id="nudge-minutes" min="1" max="60" step="1" />
+            <span class="setting-note">minutes before a meeting</span>
+          </div>
+        </section>
+
+        <section>
+          <h3>Calendar</h3>
+          <div class="setting-row">
+            <span class="setting-label">Access</span>
+            <span class="setting-note" id="calendar-status">Checking…</span>
+            <button id="calendar-connect-2" hidden>Connect</button>
+          </div>
+          <ul id="calendar-picker"></ul>
+          <p class="setting-note label-note" id="calendar-hint">
+            Reads the accounts Calendar.app already has — nothing to sign in to again.
+            Untick a calendar to keep it out of your agenda.
+          </p>
+        </section>
+
+        <section>
+          <h3>iPhone</h3>
+          <div class="setting-row">
+            <span class="setting-label">Anywhere</span>
+            <button class="sync-url" id="sync-url-ts">—</button>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">Wi-Fi</span>
+            <button class="sync-url" id="sync-url-lan">—</button>
+          </div>
+          <p class="setting-note label-note">
+            Tap a link to copy it, open it in Safari on your iPhone, then Share → Add to Home Screen.
+            "Anywhere" works from any network once the Tailscale app is signed in on the phone;
+            "Wi-Fi" works when both devices share a network. The Mac must be awake.
+          </p>
         </section>
 
         <section>

@@ -23,7 +23,22 @@ const DEFAULT_SETTINGS = {
   menubar: true,
   lastBriefDate: null,
   lastReviewDate: null,
+  // Evening kickoff — the brief that lands when the work actually happens.
+  eveningKickoff: true,
+  kickoffTime: '21:30',
+  lastKickoffDate: null,
+  // Calendar
+  meetingNudge: true,
+  meetingNudgeMinutes: 10,
+  calendarIds: null, // null = every calendar; an array is an explicit pick
+  agendaFolded: false,
+  // Lock-in
+  lockInMinutes: 60,
+  lockInWithFocus: true,
 };
+
+const STALE_DAYS = 3;
+const AGENDA_GAP_MIN = 30; // shorter gaps aren't worth calling free time
 
 let state = {
   tasks: [],
@@ -39,6 +54,8 @@ let state = {
 
 let activeLabel = null; // null = All; selected chip filters AND labels new tasks
 let openTaskId = null;
+let calendarSnap = { events: [], calendars: [], status: 'unknown', error: null };
+let lockinState = { active: false };
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -109,6 +126,40 @@ const els = {
   bubbleStyle: $('bubble-style'),
   menubarToggle: $('menubar-toggle'),
   loginCheckbox: $('login-checkbox'),
+  // Lock-in
+  lockinBtn: $('lockin-btn'),
+  lockinStrip: $('lockin-strip'),
+  lockinLabel: $('lockin-label'),
+  lockinTime: $('lockin-time'),
+  lockinPlus: $('lockin-plus'),
+  lockinStop: $('lockin-stop'),
+  lockinMenu: $('lockin-menu'),
+  lockinCustomMin: $('lockin-custom-min'),
+  lockinCustomGo: $('lockin-custom-go'),
+  lockinFocusToggle: $('lockin-focus-toggle'),
+  lockinMinutes: $('lockin-minutes'),
+  lockinWithFocus: $('lockin-with-focus'),
+  // Agenda
+  agenda: $('agenda'),
+  agendaFree: $('agenda-free'),
+  agendaCollapse: $('agenda-collapse'),
+  agendaList: $('agenda-list'),
+  calendarCta: $('calendar-cta'),
+  calendarCtaText: $('calendar-cta-text'),
+  calendarConnect: $('calendar-connect'),
+  calendarConnect2: $('calendar-connect-2'),
+  calendarStatus: $('calendar-status'),
+  calendarPicker: $('calendar-picker'),
+  // Insights
+  agingBlock: $('aging-block'),
+  agingList: $('aging-list'),
+  clientBlock: $('client-block'),
+  clientList: $('client-list'),
+  // Reminders
+  kickoffToggle: $('kickoff-toggle'),
+  kickoffTime: $('kickoff-time'),
+  nudgeToggle: $('nudge-toggle'),
+  nudgeMinutes: $('nudge-minutes'),
 };
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -231,6 +282,81 @@ function formatMinutes(ms) {
   const mins = Math.round(ms / 60000);
   if (mins < 60) return `${mins}m`;
   return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+}
+
+function taskAgeDays(task) {
+  if (!task.createdAt) return 0;
+  return Math.floor((Date.now() - task.createdAt) / DAY_MS);
+}
+
+/// A task is "aging" only when nothing else is already flagging it — an
+/// overdue date or a start time is a louder signal than age on its own.
+function isAging(task) {
+  return !task.done && !task.due && !task.startAt && taskAgeDays(task) >= STALE_DAYS;
+}
+
+function ageClass(days) {
+  if (days >= 14) return 'hot';
+  if (days >= 7) return 'warm';
+  return '';
+}
+
+/* ---------- Calendar helpers ---------- */
+
+function endOfToday() {
+  const d = new Date();
+  d.setHours(23, 59, 59, 999);
+  return d.getTime();
+}
+
+function eventStart(ev) { return Date.parse(ev.start); }
+function eventEnd(ev) { return Date.parse(ev.end || ev.start); }
+
+function liveEvents() {
+  return (calendarSnap.events || []).filter((e) => e.status !== 'canceled');
+}
+
+function todaysEvents() {
+  const from = startOfToday();
+  const to = endOfToday();
+  return liveEvents()
+    .filter((e) => {
+      const s = eventStart(e);
+      if (!Number.isFinite(s)) return false;
+      return e.allDay ? s <= to && eventEnd(e) >= from : s <= to && eventEnd(e) >= from;
+    })
+    .sort((a, b) => (a.allDay ? 0 : 1) - (b.allDay ? 0 : 1) || eventStart(a) - eventStart(b));
+}
+
+/// Total booked milliseconds in [from, to], with overlapping meetings merged so
+/// a double-booked hour is only counted once.
+function busyMs(events, from, to) {
+  const spans = events
+    .filter((e) => !e.allDay)
+    .map((e) => [Math.max(eventStart(e), from), Math.min(eventEnd(e), to)])
+    .filter(([a, b]) => Number.isFinite(a) && Number.isFinite(b) && b > a)
+    .sort((a, b) => a[0] - b[0]);
+
+  let total = 0;
+  let curStart = null;
+  let curEnd = null;
+  for (const [a, b] of spans) {
+    if (curEnd === null || a > curEnd) {
+      if (curEnd !== null) total += curEnd - curStart;
+      curStart = a;
+      curEnd = b;
+    } else if (b > curEnd) {
+      curEnd = b;
+    }
+  }
+  if (curEnd !== null) total += curEnd - curStart;
+  return total;
+}
+
+function eventTimeLabel(ev) {
+  if (ev.allDay) return 'All day';
+  const d = new Date(eventStart(ev));
+  return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 }
 
 /* ---------- Natural-language quick add ---------- */
@@ -375,6 +501,12 @@ function buildMeta(task) {
 
   if (task.focusedMs) {
     meta.appendChild(metaChip('', null, formatMinutes(task.focusedMs)));
+  }
+
+  // Nothing else is flagging this one and it's been sitting a while.
+  if (isAging(task)) {
+    const days = taskAgeDays(task);
+    meta.appendChild(metaChip(`age-chip ${ageClass(days)}`, clockSvg(), `${days}d old`));
   }
 
   const label = labelFor(task.label);
@@ -542,6 +674,23 @@ function buildDetail(task) {
     render();
   }));
   wrap.appendChild(detailRow('Deadline', ...dueControls));
+
+  // Two-way: put this task's start time on a real calendar.
+  if (calendarSnap.status === 'fullAccess') {
+    const calBtn = document.createElement('button');
+    calBtn.className = 'focus-btn';
+    if (task.eventId) {
+      calBtn.textContent = 'Remove from calendar';
+      calBtn.addEventListener('click', () => unblockTime(task, calBtn));
+    } else if (task.startAt) {
+      calBtn.textContent = `Block ${state.settings.focusMinutes || 25} min`;
+      calBtn.addEventListener('click', () => blockTime(task, calBtn));
+    } else {
+      calBtn.textContent = 'Set a start time first';
+      calBtn.disabled = true;
+    }
+    wrap.appendChild(detailRow('Calendar', calBtn));
+  }
 
   return wrap;
 }
@@ -766,6 +915,8 @@ function startFocus(taskId) {
     minutes,
   };
   save();
+  // A session that lets the screen lock is a session you abandon.
+  if (state.settings.lockInWithFocus !== false) startLockin(minutes, 'focus');
   render();
 }
 
@@ -779,6 +930,10 @@ function logFocus(task, ms) {
 function stopFocus(completed) {
   const focus = activeFocus();
   state.focus = null;
+  // Only release the assertion if the session is what took it.
+  if (lockinState.active && lockinState.reason === 'focus') {
+    window.api.lockinStop().then((s) => { lockinState = s; renderLockin(); });
+  }
   if (focus) {
     logFocus(focus.task, focus.elapsed);
     if (completed) {
@@ -824,6 +979,443 @@ function focusTick() {
   }
 }
 
+/* ---------- Agenda ---------- */
+
+function taskPlusSvg() {
+  return `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor"
+      stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>`;
+}
+
+function notePlusSvg() {
+  return `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor"
+      stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>`;
+}
+
+function agendaRow(ev, now) {
+  const li = document.createElement('li');
+  const live = !ev.allDay && eventStart(ev) <= now && eventEnd(ev) > now;
+  const past = !ev.allDay && eventEnd(ev) <= now;
+  li.className = 'agenda-item' + (live ? ' now' : '') + (past ? ' past' : '');
+
+  const rail = document.createElement('span');
+  rail.className = 'agenda-rail';
+  if (ev.color && !live) rail.style.background = ev.color;
+
+  const time = document.createElement('span');
+  time.className = 'agenda-time';
+  time.textContent = eventTimeLabel(ev);
+
+  const body = document.createElement('div');
+  body.className = 'agenda-body';
+  const name = document.createElement('div');
+  name.className = 'agenda-name';
+  name.textContent = ev.title;
+  name.title = ev.title;
+  body.appendChild(name);
+
+  // One line of context, in order of how much it tells you.
+  const bits = [];
+  if (live) bits.push('Now');
+  if (ev.location) bits.push(ev.location);
+  else if (ev.attendeeCount) bits.push(`${ev.attendeeCount} people`);
+  else if (ev.calendar) bits.push(ev.calendar);
+  if (bits.length) {
+    const sub = document.createElement('div');
+    sub.className = 'agenda-sub';
+    sub.textContent = bits.join(' · ');
+    body.appendChild(sub);
+  }
+
+  const actions = document.createElement('div');
+  actions.className = 'agenda-actions';
+  const action = (svg, title, fn) => {
+    const b = document.createElement('button');
+    b.innerHTML = svg;
+    b.title = title;
+    b.addEventListener('click', (e) => { e.stopPropagation(); fn(); });
+    actions.appendChild(b);
+  };
+  action(taskPlusSvg(), 'Make a task from this', () => taskFromEvent(ev));
+  action(notePlusSvg(), 'Prepare a note for this', () => noteFromEvent(ev));
+
+  li.append(rail, time, body, actions);
+  return li;
+}
+
+function renderAgenda() {
+  const status = calendarSnap.status;
+  const connected = status === 'fullAccess';
+  const blocked = status === 'denied' || status === 'restricted';
+
+  els.agenda.hidden = !connected;
+  els.calendarCta.hidden = connected;
+
+  if (!connected) {
+    els.calendarCtaText.textContent = blocked
+      ? 'Calendar access is off. Turn miTasks on in System Settings → Privacy & Security → Calendars.'
+      : "See today's meetings alongside your tasks.";
+    els.calendarConnect.hidden = blocked;
+    return;
+  }
+
+  const now = Date.now();
+  const events = todaysEvents();
+  els.agenda.classList.toggle('folded', !!state.settings.agendaFolded);
+
+  const free = Math.max(0, endOfToday() - now - busyMs(events, now, endOfToday()));
+  const left = events.filter((e) => !e.allDay && eventEnd(e) > now).length;
+  els.agendaFree.textContent = events.length
+    ? `${formatMinutes(free)} free` + (left ? ` · ${left} to go` : '')
+    : 'Nothing booked';
+
+  els.agendaList.textContent = '';
+  let prevEnd = null;
+  for (const ev of events) {
+    if (!ev.allDay && prevEnd !== null) {
+      const gap = eventStart(ev) - prevEnd;
+      if (gap >= AGENDA_GAP_MIN * 60000) {
+        const li = document.createElement('li');
+        li.className = 'agenda-gap';
+        li.textContent = `${formatMinutes(gap)} open`;
+        els.agendaList.appendChild(li);
+      }
+    }
+    els.agendaList.appendChild(agendaRow(ev, now));
+    if (!ev.allDay) prevEnd = Math.max(prevEnd ?? 0, eventEnd(ev));
+  }
+}
+
+function taskFromEvent(ev) {
+  const start = new Date(eventStart(ev));
+  state.tasks.unshift({
+    id: uid(),
+    text: ev.title,
+    label: activeLabel,
+    done: false,
+    createdAt: Date.now(),
+    doneAt: null,
+    notes: [ev.location, ev.notes].filter(Boolean).join('\n\n').slice(0, 5000),
+    priority: null,
+    due: toDateStr(start),
+    startAt: ev.allDay ? null : toLocalDateTimeStr(start),
+    repeat: null,
+    reminded: false,
+    dueReminded: false,
+    focusedMs: 0,
+    // Deliberately NOT `eventId`: that field means "miTasks made this event"
+    // and the detail panel offers to delete it. This meeting already existed,
+    // so we only record where it came from.
+    sourceEventId: ev.id,
+  });
+  save();
+  render();
+}
+
+function noteFromEvent(ev) {
+  const lines = [];
+  if (Number.isFinite(eventStart(ev))) {
+    lines.push(
+      new Date(eventStart(ev)).toLocaleString(undefined, {
+        weekday: 'long', month: 'long', day: 'numeric',
+        hour: 'numeric', minute: '2-digit',
+      })
+    );
+  }
+  if (ev.location) lines.push(ev.location);
+  if (Array.isArray(ev.attendees) && ev.attendees.length) lines.push('With: ' + ev.attendees.join(', '));
+
+  const note = {
+    id: uid(),
+    label: activeLabel,
+    title: ev.title,
+    body: lines.length ? lines.join('\n') + '\n\n' : '',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+  state.notes.push(note);
+  save();
+  openNotes();
+  openNoteEditor(note.id);
+}
+
+/* Two-way: put a task's start time on a real calendar. */
+
+async function blockTime(task, btn) {
+  if (!task.startAt) return;
+  btn.disabled = true;
+  btn.textContent = 'Blocking…';
+  const res = await window.api.calendarCreate({
+    title: task.text,
+    start: task.startAt,
+    minutes: state.settings.focusMinutes || 25,
+    notes: task.notes || '',
+    alarmMinutesBefore: state.settings.meetingNudgeMinutes || 10,
+  });
+  if (res && res.ok && res.event) {
+    task.eventId = res.event.id;
+    save();
+    render();
+    return;
+  }
+  btn.textContent = (res && res.error) ? String(res.error).slice(0, 38) : 'Could not block';
+  setTimeout(render, 2600);
+}
+
+async function unblockTime(task, btn) {
+  btn.disabled = true;
+  btn.textContent = 'Removing…';
+  const res = await window.api.calendarDelete(task.eventId);
+  // Drop the link either way — a vanished event shouldn't strand the row.
+  task.eventId = null;
+  save();
+  render();
+  if (res && !res.ok) console.warn('calendar delete failed:', res.error);
+}
+
+/* ---------- Lock-in ---------- */
+
+function lockinClock(ms) {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const sec = total % 60;
+  const pad = (n) => String(n).padStart(2, '0');
+  return h ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`;
+}
+
+function renderLockin() {
+  const active = !!lockinState.active;
+  els.lockinStrip.hidden = !active;
+  els.lockinBtn.classList.toggle('active', active);
+  if (active) els.lockinMenu.hidden = true;
+  if (!active) return;
+  els.lockinLabel.textContent = lockinState.reason === 'focus' ? 'Awake · focus' : 'Locked in';
+  els.lockinTime.textContent = lockinClock(lockinState.endAt - Date.now());
+}
+
+function lockinTick() {
+  if (!lockinState.active) return;
+  if (lockinState.endAt - Date.now() <= 0) {
+    // main will confirm, but drop the strip immediately rather than sit at 0:00.
+    lockinState = { active: false };
+    renderLockin();
+    return;
+  }
+  els.lockinTime.textContent = lockinClock(lockinState.endAt - Date.now());
+}
+
+async function startLockin(minutes, reason = 'manual') {
+  els.lockinMenu.hidden = true;
+  lockinState = await window.api.lockinStart(minutes, reason);
+  renderLockin();
+}
+
+/* ---------- Insights: aging & label health ---------- */
+
+function renderAging() {
+  const aging = state.tasks.filter(isAging).sort((a, b) => a.createdAt - b.createdAt);
+  els.agingBlock.hidden = aging.length === 0;
+  els.agingList.textContent = '';
+
+  for (const task of aging.slice(0, 8)) {
+    const li = document.createElement('li');
+    li.className = 'attention-item';
+    const name = document.createElement('span');
+    name.className = 'attention-text';
+    name.textContent = task.text;
+    const days = taskAgeDays(task);
+    const tag = document.createElement('span');
+    tag.className = 'attention-why' + (ageClass(days) === 'hot' ? ' overdue' : '');
+    tag.textContent = `${days}d`;
+    li.append(name, tag);
+    li.addEventListener('click', () => {
+      activeLabel = null;
+      openTaskId = task.id;
+      closeSettings();
+      render();
+    });
+    els.agingList.appendChild(li);
+  }
+}
+
+function renderClientHealth() {
+  const buckets = new Map();
+  for (const task of state.tasks) {
+    const key = task.label || null;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(task);
+  }
+
+  const rows = [...buckets].map(([name, tasks]) => {
+    const done = tasks.filter((t) => t.done).length;
+    const touched = tasks.map((t) => t.doneAt || t.createdAt || 0);
+    return {
+      name,
+      total: tasks.length,
+      done,
+      open: tasks.length - done,
+      last: touched.length ? Math.max(...touched) : 0,
+    };
+  });
+
+  // Buckets with open work come first, oldest activity at the top — the whole
+  // point is spotting the client that has gone quiet.
+  rows.sort((a, b) => (b.open ? 1 : 0) - (a.open ? 1 : 0) || a.last - b.last);
+
+  els.clientBlock.hidden = rows.length === 0;
+  els.clientList.textContent = '';
+
+  for (const row of rows) {
+    const li = document.createElement('li');
+    li.className = 'client-row';
+    const label = labelFor(row.name);
+
+    const name = document.createElement('span');
+    name.className = 'client-name';
+    if (label) {
+      const dot = document.createElement('span');
+      dot.className = 'dot';
+      dot.style.background = label.color;
+      dot.style.marginRight = '7px';
+      name.appendChild(dot);
+    }
+    name.appendChild(document.createTextNode(row.name || 'No label'));
+    name.title = row.name || 'No label';
+
+    const track = document.createElement('div');
+    track.className = 'client-track';
+    const fill = document.createElement('div');
+    fill.className = 'client-fill';
+    fill.style.width = (row.total ? (row.done / row.total) * 100 : 0) + '%';
+    fill.style.background = label ? label.color : 'rgba(240,234,221,0.3)';
+    track.appendChild(fill);
+
+    const meta = document.createElement('span');
+    meta.className = 'client-meta';
+    const quietDays = row.last ? Math.floor((Date.now() - row.last) / DAY_MS) : 0;
+    if (row.open) {
+      meta.textContent = quietDays >= 7 ? `${row.open} open · ${quietDays}d` : `${row.open} open`;
+      if (quietDays >= 7) meta.classList.add('quiet');
+    } else {
+      meta.textContent = `${row.done}/${row.total}`;
+    }
+
+    li.append(name, track, meta);
+    els.clientList.appendChild(li);
+  }
+}
+
+/* ---------- Calendar settings ---------- */
+
+function renderCalendarSettings() {
+  const status = calendarSnap.status;
+  const ok = status === 'fullAccess';
+
+  els.calendarStatus.textContent = ok
+    ? `${calendarSnap.calendars.length} calendar${calendarSnap.calendars.length === 1 ? '' : 's'} connected`
+    : status === 'denied'
+      ? 'Off — System Settings › Privacy › Calendars'
+      : status === 'restricted'
+        ? 'Restricted by policy'
+        : 'Not connected';
+  els.calendarStatus.className = 'setting-note ' + (ok ? 'ok' : 'bad');
+  els.calendarConnect2.hidden = ok || status === 'restricted';
+
+  els.calendarPicker.textContent = '';
+  if (!ok) return;
+
+  const selected = state.settings.calendarIds;
+  for (const cal of calendarSnap.calendars) {
+    const on = !Array.isArray(selected) || selected.includes(cal.id);
+    const li = document.createElement('li');
+    li.className = 'cal-item' + (on ? '' : ' off');
+
+    const check = document.createElement('span');
+    check.className = 'cal-check';
+    check.innerHTML = checkSvg();
+
+    const name = document.createElement('span');
+    name.className = 'cal-name';
+    const dot = document.createElement('span');
+    dot.className = 'dot';
+    dot.style.background = cal.color || 'rgba(240,234,221,0.3)';
+    dot.style.marginRight = '7px';
+    name.append(dot, document.createTextNode(cal.title));
+    name.title = cal.title;
+
+    const account = document.createElement('span');
+    account.className = 'cal-account';
+    account.textContent = cal.account || '';
+
+    li.append(check, name, account);
+    li.addEventListener('click', () => toggleCalendar(cal.id));
+    els.calendarPicker.appendChild(li);
+  }
+}
+
+function toggleCalendar(id) {
+  const all = calendarSnap.calendars.map((c) => c.id);
+  const current = Array.isArray(state.settings.calendarIds)
+    ? state.settings.calendarIds
+    : all.slice();
+  const next = current.includes(id) ? current.filter((x) => x !== id) : [...current, id];
+  // Everything ticked is the same as no filter — store the simpler form.
+  state.settings.calendarIds = next.length === all.length ? null : next;
+  save();
+  renderCalendarSettings();
+  window.api.calendarRefresh();
+}
+
+/// Says what actually happened, rather than a generic failure. The three
+/// outcomes need different things from the user, so they get different copy.
+function accessMessage(res) {
+  const status = (res && res.status) || 'unknown';
+  if (res && res.error) return `Calendar error: ${res.error}`;
+  if (status === 'denied') {
+    return 'Denied. Turn miTasks back on in System Settings › Privacy & Security › Calendars.';
+  }
+  if (status === 'notDetermined') {
+    return 'macOS did not show the prompt. Quit miTasks and reopen it from Spotlight, then try again.';
+  }
+  if (status === 'restricted') return 'Calendar access is restricted by a profile on this Mac.';
+  if (status === 'writeOnly') {
+    return 'Only write access was granted. miTasks needs full access to show your agenda.';
+  }
+  return `Calendar access not granted (${status}).`;
+}
+
+async function connectCalendar(btn) {
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Waiting…';
+
+  let res;
+  try {
+    res = await window.api.calendarRequest();
+  } catch (err) {
+    res = { status: 'unknown', error: String(err && err.message ? err.message : err) };
+  }
+  calendarSnap = (await window.api.calendarGet()) || calendarSnap;
+
+  btn.disabled = false;
+  btn.textContent = original;
+
+  // Re-render first, then write the message over the top — both renderers
+  // reset this copy, so setting it beforehand would just be overwritten.
+  renderAgenda();
+  renderCalendarSettings();
+
+  if (calendarSnap.status !== 'fullAccess') {
+    const message = accessMessage(res);
+    els.calendarCtaText.textContent = message;
+    els.calendarStatus.textContent = message;
+    els.calendarStatus.className = 'setting-note bad';
+    console.warn('calendar request:', JSON.stringify(res));
+  }
+}
+
 /* ---------- Render ---------- */
 
 function render() {
@@ -853,12 +1445,16 @@ function render() {
   renderChips();
   renderProgress();
   renderFocusStrip();
+  renderAgenda();
+  renderLockin();
   if (!els.settings.hidden) renderInsights();
 }
 
 /* ---------- Insights / settings ---------- */
 
 function renderInsights() {
+  renderAging();
+  renderClientHealth();
   const today = startOfToday();
   const now = Date.now();
   const doneTasks = state.tasks.filter((t) => t.done);
@@ -1200,6 +1796,7 @@ function openSettings() {
   closeNotes();
   renderInsights();
   renderLabelManager();
+  renderCalendarSettings();
   els.settings.hidden = false;
 }
 
@@ -1249,6 +1846,33 @@ async function initSettingsControls() {
   bindToggle(els.reviewToggle, 'weeklyReview');
   bindTime(els.reviewTime, 'reviewTime', '17:00');
   bindToggle(els.menubarToggle, 'menubar');
+  bindToggle(els.kickoffToggle, 'eveningKickoff');
+  bindTime(els.kickoffTime, 'kickoffTime', '21:30');
+  bindToggle(els.nudgeToggle, 'meetingNudge');
+
+  const bindNumber = (el, key, min, max, fallback) => {
+    el.value = state.settings[key] || fallback;
+    el.addEventListener('change', () => {
+      const v = parseInt(el.value, 10);
+      state.settings[key] = Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback;
+      el.value = state.settings[key];
+      save();
+    });
+  };
+  bindNumber(els.nudgeMinutes, 'meetingNudgeMinutes', 1, 60, 10);
+  bindNumber(els.lockinMinutes, 'lockInMinutes', 1, 480, 60);
+
+  // The tie-in has a control in Advanced and one in the lock-in sheet.
+  const syncTie = (on) => {
+    els.lockinWithFocus.checked = on;
+    els.lockinFocusToggle.checked = on;
+  };
+  syncTie(state.settings.lockInWithFocus !== false);
+  els.lockinWithFocus.addEventListener('change', () => {
+    state.settings.lockInWithFocus = els.lockinWithFocus.checked;
+    syncTie(els.lockinWithFocus.checked);
+    save();
+  });
 
   els.focusMinutes.value = state.settings.focusMinutes || 25;
   els.focusMinutes.addEventListener('change', () => {
@@ -1330,6 +1954,7 @@ function spawnNextOccurrence(task) {
     dueReminded: false,
     focusedMs: 0,
     notes: task.notes,
+    eventId: null, // the next occurrence isn't the event we already booked
   };
   if (task.due) next.due = shiftDateStr(task.due, task.repeat);
   if (task.startAt) next.startAt = shiftDateTimeStr(task.startAt, task.repeat);
@@ -1408,6 +2033,8 @@ function celebrate() {
 function setBodyMode(mode) {
   document.body.classList.toggle('expanded', mode === 'expanded');
   document.body.classList.toggle('collapsed', mode === 'collapsed');
+  // Don't let a half-made choice greet you next time the panel opens.
+  if (mode === 'collapsed') els.lockinMenu.hidden = true;
   if (mode === 'expanded') {
     requestAnimationFrame(() => els.input.focus());
   }
@@ -1438,8 +2065,18 @@ function migrateState() {
     if (t.reminded === undefined) t.reminded = false;
     if (t.dueReminded === undefined) t.dueReminded = false;
     if (t.focusedMs === undefined) t.focusedMs = 0;
+    if (t.eventId === undefined) t.eventId = null;
+    if (t.sourceEventId === undefined) t.sourceEventId = null;
   });
   state.settings = { ...DEFAULT_SETTINGS, ...(state.settings || {}) };
+  // One-time retime: completions here cluster after 22:00, so a stock 08:30
+  // brief and a Friday-17:00 review were firing when nobody was looking. Only
+  // shifts times still sitting on the old defaults — a deliberate choice stays.
+  if (!state.settings.retimedV1) {
+    if (state.settings.briefTime === '08:30') state.settings.briefTime = '10:00';
+    if (state.settings.reviewTime === '17:00') state.settings.reviewTime = '22:00';
+    state.settings.retimedV1 = true;
+  }
   if (!Array.isArray(state.focusLog)) state.focusLog = [];
   if (!Array.isArray(state.notes)) state.notes = [];
   // Earlier builds stored one-line "points" — fold them into notes.
@@ -1471,6 +2108,9 @@ async function init() {
     state = { ...state, ...saved };
   }
   migrateState();
+  // Persist immediately so main.js and disk agree about the new settings
+  // rather than waiting for whatever the user happens to do first.
+  save();
 
   renderDate();
   setInterval(renderDate, 60 * 1000);
@@ -1506,13 +2146,42 @@ async function init() {
   window.api.onSummaryFired(({ kind, date }) => {
     if (kind === 'brief') state.settings.lastBriefDate = date;
     if (kind === 'review') state.settings.lastReviewDate = date;
+    if (kind === 'kickoff') state.settings.lastKickoffDate = date;
     save();
     pulseBubble();
   });
 
+  window.api.onMeetingNudge(() => pulseBubble());
+
   window.api.onOpenInsights(() => {
     openSettings();
     render();
+  });
+
+  // A phone made a change — adopt it. Keep local UI state (filters, open task).
+  window.api.onExternalState((incoming) => {
+    if (!incoming || !Array.isArray(incoming.tasks)) return;
+    state = incoming;
+    migrateState();
+    render();
+  });
+
+  // Populate the iPhone links in Advanced.
+  window.api.getSyncInfo().then((info) => {
+    const bind = (el, url) => {
+      if (!url) { el.textContent = 'not available'; return; }
+      el.textContent = url;
+      el.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(url);
+          const prev = el.textContent;
+          el.textContent = 'Copied — open it on your iPhone';
+          setTimeout(() => { el.textContent = prev; }, 2000);
+        } catch { /* clipboard unavailable */ }
+      });
+    };
+    bind(document.getElementById('sync-url-ts'), info.public || info.tailscale);
+    bind(document.getElementById('sync-url-lan'), info.lan);
   });
 
   els.addBtn.addEventListener('click', addTask);
@@ -1522,7 +2191,9 @@ async function init() {
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-      if (!els.noteEditor.hidden) {
+      if (!els.lockinMenu.hidden) {
+        els.lockinMenu.hidden = true;
+      } else if (!els.noteEditor.hidden) {
         closeNoteEditor();
       } else if (!els.notesView.hidden) {
         closeNotes();
@@ -1536,6 +2207,59 @@ async function init() {
       }
     }
   });
+
+  // Calendar + lock-in both live in the main process; mirror them here.
+  calendarSnap = (await window.api.calendarGet()) || calendarSnap;
+  lockinState = (await window.api.lockinStatus()) || lockinState;
+
+  window.api.onCalendarState((snap) => {
+    if (!snap) return;
+    calendarSnap = snap;
+    renderAgenda();
+    if (!els.settings.hidden) renderCalendarSettings();
+  });
+
+  window.api.onLockinState((s) => {
+    lockinState = s || { active: false };
+    renderLockin();
+  });
+
+  setInterval(lockinTick, 1000);
+
+  const applyLockin = (promise) =>
+    promise.then((s) => { lockinState = s || { active: false }; renderLockin(); });
+
+  els.lockinBtn.addEventListener('click', () => {
+    if (lockinState.active) { applyLockin(window.api.lockinStop()); return; }
+    els.lockinMenu.hidden = !els.lockinMenu.hidden;
+    if (!els.lockinMenu.hidden) els.lockinCustomMin.value = state.settings.lockInMinutes || 60;
+  });
+  els.lockinStop.addEventListener('click', () => applyLockin(window.api.lockinStop()));
+  els.lockinPlus.addEventListener('click', () => applyLockin(window.api.lockinExtend(15)));
+  for (const btn of els.lockinMenu.querySelectorAll('.lockin-opts button')) {
+    btn.addEventListener('click', () => startLockin(parseInt(btn.dataset.min, 10)));
+  }
+  els.lockinCustomGo.addEventListener('click', () => {
+    const v = parseInt(els.lockinCustomMin.value, 10);
+    if (Number.isFinite(v) && v > 0) startLockin(v);
+  });
+  els.lockinCustomMin.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') els.lockinCustomGo.click();
+    e.stopPropagation();
+  });
+  els.lockinFocusToggle.addEventListener('change', () => {
+    state.settings.lockInWithFocus = els.lockinFocusToggle.checked;
+    els.lockinWithFocus.checked = els.lockinFocusToggle.checked;
+    save();
+  });
+
+  els.agendaCollapse.addEventListener('click', () => {
+    state.settings.agendaFolded = !state.settings.agendaFolded;
+    save();
+    renderAgenda();
+  });
+  els.calendarConnect.addEventListener('click', () => connectCalendar(els.calendarConnect));
+  els.calendarConnect2.addEventListener('click', () => connectCalendar(els.calendarConnect2));
 
   els.clearDone.addEventListener('click', clearDone);
   els.settingsBtn.addEventListener('click', openSettings);
