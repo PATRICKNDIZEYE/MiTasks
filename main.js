@@ -1,5 +1,9 @@
-const { app, BrowserWindow, ipcMain, screen, globalShortcut, Notification, Tray, nativeImage, powerMonitor } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, globalShortcut, Notification, Tray, nativeImage, powerMonitor, Menu } = require('electron');
 const { execFile } = require('child_process');
+const crypto = require('crypto');
+const { startSyncServer, spawnNextOccurrence } = require('./server');
+const calendar = require('./calendar');
+const lockin = require('./lockin');
 const path = require('path');
 const fs = require('fs');
 
@@ -10,6 +14,9 @@ const SIZES = {
 };
 const SOUNDS_DIR = '/System/Library/Sounds';
 const REMINDER_WINDOW_MS = 60 * 60 * 1000; // don't fire for things more than an hour stale
+const MEETING_WINDOW_MS = 2 * 60 * 1000;   // a nudge is only useful right on the mark
+const STALE_TASK_MS = 3 * 24 * 60 * 60 * 1000;
+const PRIORITY_RANK = { high: 0, med: 1 };
 
 let win = null;
 let mode = 'collapsed';
@@ -18,8 +25,12 @@ let dragState = null;
 let anchorSaveTimer = null;
 let appState = null; // last known task state, used by the reminder loop
 let tray = null;
+let fileSettings = {};
+let syncServer = null;
+const SYNC_PORT = 43917;
 const firedReminders = new Set();
 const firedSummaries = new Set();
+const firedMeetings = new Set();
 
 const dataFile = () => path.join(app.getPath('userData'), 'tasks.json');
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
@@ -60,7 +71,10 @@ function boundsFor(m) {
 
 function persistAnchor() {
   clearTimeout(anchorSaveTimer);
-  anchorSaveTimer = setTimeout(() => writeJson(settingsFile(), { anchor }), 300);
+  anchorSaveTimer = setTimeout(() => {
+    fileSettings.anchor = anchor;
+    writeJson(settingsFile(), fileSettings);
+  }, 300);
 }
 
 function updateAnchorFromWindow() {
@@ -77,6 +91,7 @@ function setMode(m) {
   if (m === 'expanded') {
     win.show();
     win.focus();
+    calendar.refresh(); // throttled internally — a no-op if we just looked
   }
 }
 
@@ -151,7 +166,43 @@ function checkReminders() {
     }
   }
 
+  checkMeetings(now, settings);
   checkSummaries(now, settings);
+}
+
+/* ---------- Pre-meeting nudges ---------- */
+
+function fireMeetingNudge(ev) {
+  const key = `${ev.id}:${ev.start}`;
+  if (firedMeetings.has(key)) return;
+  firedMeetings.add(key);
+
+  playSound(settingsOf(appState).sound || 'Glass');
+  if (Notification.isSupported()) {
+    const mins = Math.max(1, Math.round((Date.parse(ev.start) - Date.now()) / 60000));
+    const n = new Notification({
+      title: `${ev.title} · in ${mins} min`,
+      body: ev.location || ev.calendar || '',
+      silent: true,
+    });
+    n.on('click', () => setMode('expanded'));
+    n.show();
+  }
+  if (win) win.webContents.send('meeting-nudge', { id: ev.id, title: ev.title, start: ev.start });
+}
+
+function checkMeetings(now, settings) {
+  if (settings.meetingNudge === false) return;
+  const lead = (Number(settings.meetingNudgeMinutes) || 10) * 60 * 1000;
+
+  for (const ev of calendar.snapshot().events) {
+    if (ev.allDay || ev.status === 'canceled' || !ev.start) continue;
+    const ts = Date.parse(ev.start);
+    if (!Number.isFinite(ts)) continue;
+    // Fire once, close to the mark — never replay a meeting we slept through.
+    const fireAt = ts - lead;
+    if (fireAt <= now && now - fireAt < MEETING_WINDOW_MS) fireMeetingNudge(ev);
+  }
 }
 
 /* ---------- Morning brief & weekly review ---------- */
@@ -230,9 +281,121 @@ function checkSummaries(now, settings) {
       fireSummary('review', 'Your week in review', bits.join(' · '), true);
     }
   }
+
+  // Evening kickoff — the hours when the work actually happens.
+  if (settings.eveningKickoff !== false && settings.lastKickoffDate !== todayStr) {
+    const ts = Date.parse(`${todayStr}T${settings.kickoffTime || '21:30'}`);
+    if (Number.isFinite(ts) && ts <= now && now - ts < SUMMARY_WINDOW_MS) {
+      const startToday = new Date(today); startToday.setHours(0, 0, 0, 0);
+      const pending = tasks.filter((t) => !t.done);
+      const stale = pending.filter((t) => t.createdAt && now - t.createdAt > STALE_TASK_MS).length;
+      const doneToday = tasks.filter((t) => t.done && (t.doneAt || 0) >= startToday.getTime()).length;
+      const bits = [];
+      if (pending.length) bits.push(`${pending.length} still open`);
+      if (stale) bits.push(`${stale} aging`);
+      if (doneToday) bits.push(`${doneToday} closed today`);
+      fireSummary(
+        'kickoff',
+        'Evening runway',
+        bits.length ? bits.join(' · ') : 'Nothing open — rest easy.',
+        false
+      );
+    }
+  }
 }
 
 /* ---------- Menu bar ---------- */
+
+function dueTime(task) {
+  return task.due ? Date.parse(task.due + 'T00:00:00') : Number.MAX_SAFE_INTEGER;
+}
+
+function rankedPending() {
+  return (appState?.tasks || [])
+    .filter((t) => !t.done)
+    .sort(
+      (a, b) =>
+        (PRIORITY_RANK[a.priority] ?? 2) - (PRIORITY_RANK[b.priority] ?? 2) ||
+        dueTime(a) - dueTime(b) ||
+        b.createdAt - a.createdAt
+    );
+}
+
+function nextMeeting() {
+  const now = Date.now();
+  return (
+    calendar
+      .snapshot()
+      .events.find((e) => !e.allDay && e.status !== 'canceled' && Date.parse(e.end || e.start) > now) || null
+  );
+}
+
+function shortTime(iso) {
+  const d = new Date(iso);
+  return Number.isFinite(d.getTime())
+    ? d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+    : '';
+}
+
+// Ticking a task off from the menu bar has to do everything the renderer would.
+function completeFromTray(id) {
+  const task = (appState?.tasks || []).find((t) => t.id === id);
+  if (!task || task.done) return;
+  task.done = true;
+  task.doneAt = Date.now();
+  if (task.repeat) spawnNextOccurrence(appState, task);
+  writeJson(dataFile(), appState);
+  updateTray();
+  if (win) win.webContents.send('external-state', appState);
+  if (syncServer) syncServer.broadcast();
+}
+
+function trayMenu() {
+  const items = [{ label: 'Open miTasks', click: () => setMode('expanded') }, { type: 'separator' }];
+
+  const meeting = nextMeeting();
+  if (meeting) {
+    items.push({ label: `${shortTime(meeting.start)}   ${meeting.title}`.slice(0, 64), enabled: false });
+  } else {
+    const connected = calendar.snapshot().status === 'fullAccess';
+    items.push({ label: connected ? 'No meetings ahead' : 'Calendar not connected', enabled: false });
+  }
+  items.push({ type: 'separator' });
+
+  const pending = rankedPending();
+  if (pending.length) {
+    for (const t of pending.slice(0, 5)) {
+      items.push({
+        label: `${t.priority === 'high' ? '⚑ ' : ''}${t.text}`.slice(0, 64),
+        toolTip: 'Mark done',
+        click: () => completeFromTray(t.id),
+      });
+    }
+    if (pending.length > 5) items.push({ label: `+ ${pending.length - 5} more…`, enabled: false });
+  } else {
+    items.push({ label: 'All clear', enabled: false });
+  }
+
+  const lock = lockin.status();
+  items.push({ type: 'separator' });
+  items.push(
+    lock.active
+      ? {
+          label: `Lock-in · ${Math.ceil(lock.remaining / 60000)} min left — stop`,
+          click: () => lockin.stop(),
+        }
+      : {
+          label: 'Lock in',
+          submenu: [30, 60, 90, 120].map((m) => ({
+            label: `${m} minutes`,
+            click: () => lockin.start(m, 'tray'),
+          })),
+        }
+  );
+  items.push({ type: 'separator' }, { label: 'Quit miTasks', click: () => app.quit() });
+
+  return Menu.buildFromTemplate(items);
+}
 
 function updateTray() {
   const enabled = settingsOf(appState).menubar !== false;
@@ -243,10 +406,14 @@ function updateTray() {
   if (!tray) {
     tray = new Tray(nativeImage.createEmpty());
     tray.setToolTip('miTasks');
-    tray.on('click', toggleMode);
+    // Rebuilt on every click, so the glance is never showing stale state.
+    const pop = () => tray.popUpContextMenu(trayMenu());
+    tray.on('click', pop);
+    tray.on('right-click', pop);
   }
   const pending = (appState?.tasks || []).filter((t) => !t.done).length;
-  tray.setTitle(pending ? `✓ ${pending}` : '✓', { fontType: 'monospacedDigit' });
+  const awake = lockin.status().active ? '◉ ' : '';
+  tray.setTitle(awake + (pending ? `✓ ${pending}` : '✓'), { fontType: 'monospacedDigit' });
 }
 
 /* ---------- Window ---------- */
@@ -291,17 +458,63 @@ function createWindow() {
   });
 }
 
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+}
+app.on('second-instance', () => setMode('expanded'));
+
 app.whenReady().then(() => {
   if (process.platform === 'darwin') app.dock.hide();
 
-  const settings = readJson(settingsFile());
+  fileSettings = readJson(settingsFile()) || {};
   anchor =
-    settings && settings.anchor &&
-    Number.isFinite(settings.anchor.x) && Number.isFinite(settings.anchor.y)
-      ? settings.anchor
+    fileSettings.anchor &&
+    Number.isFinite(fileSettings.anchor.x) && Number.isFinite(fileSettings.anchor.y)
+      ? fileSettings.anchor
       : defaultAnchor();
 
+  if (!fileSettings.syncToken) {
+    fileSettings.syncToken = crypto.randomBytes(8).toString('hex');
+    writeJson(settingsFile(), fileSettings);
+  }
+
   appState = readJson(dataFile());
+
+  // Phone sync: the widget doubles as a tiny web server for the iPhone app.
+  syncServer = startSyncServer({
+    port: SYNC_PORT,
+    token: fileSettings.syncToken,
+    getState: () => {
+      if (!appState) appState = { tasks: [], labels: [] };
+      if (!Array.isArray(appState.tasks)) appState.tasks = [];
+      if (!Array.isArray(appState.labels)) appState.labels = [];
+      if (!Array.isArray(appState.notes)) appState.notes = [];
+      if (!Array.isArray(appState.focusLog)) appState.focusLog = [];
+      return appState;
+    },
+    commit: (state) => {
+      appState = state;
+      writeJson(dataFile(), state);
+      updateTray();
+      if (win) win.webContents.send('external-state', state);
+    },
+    getCalendar: () => calendar.snapshot(),
+  });
+
+  // Lock-in and the agenda both feed the menu bar, so they wire up together.
+  lockin.init((status) => {
+    if (win) win.webContents.send('lockin-state', status);
+    updateTray();
+  });
+
+  calendar.start({
+    settings: () => settingsOf(appState),
+    notify: (snap) => {
+      if (win) win.webContents.send('calendar-state', snap);
+      if (syncServer) syncServer.broadcast();
+      updateTray();
+    },
+  });
 
   createWindow();
 
@@ -319,7 +532,10 @@ app.whenReady().then(() => {
     win.setBounds(boundsFor(mode));
     win.webContents.invalidate();
   };
-  powerMonitor.on('resume', reassertTransparency);
+  powerMonitor.on('resume', () => {
+    reassertTransparency();
+    calendar.refresh(true); // meetings may well have moved while we slept
+  });
   powerMonitor.on('unlock-screen', reassertTransparency);
 
   updateTray();
@@ -367,16 +583,43 @@ ipcMain.on('state:save', (_e, state) => {
   appState = state;
   writeJson(dataFile(), state);
   updateTray();
+  if (syncServer) syncServer.broadcast();
 });
 ipcMain.on('mode:set', (_e, m) => setMode(m));
 ipcMain.handle('sounds:list', () => listSounds());
 ipcMain.on('sounds:preview', (_e, name) => playSound(String(name).replace(/[^\w -]/g, '')));
+ipcMain.handle('sync:info', () => ({
+  ...(syncServer ? syncServer.urls() : {}),
+  public: fileSettings.publicUrl
+    ? `${fileSettings.publicUrl}/?key=${fileSettings.syncToken}`
+    : null,
+}));
+/* Calendar — every handler resolves to a plain object so the renderer can
+   render an error state instead of throwing. */
+ipcMain.handle('calendar:get', () => calendar.snapshot());
+ipcMain.handle('calendar:refresh', () => calendar.refresh(true));
+ipcMain.handle('calendar:request', () => calendar.requestAccess());
+ipcMain.handle('calendar:list', () => calendar.listCalendars());
+ipcMain.handle('calendar:create', (_e, body) => calendar.createEvent(body));
+ipcMain.handle('calendar:update', (_e, id, body) => calendar.updateEvent(id, body));
+ipcMain.handle('calendar:delete', (_e, id) => calendar.deleteEvent(id));
+
+/* Lock-in */
+ipcMain.handle('lockin:status', () => lockin.status());
+ipcMain.handle('lockin:start', (_e, minutes, reason) => lockin.start(minutes, reason));
+ipcMain.handle('lockin:stop', () => lockin.stop());
+ipcMain.handle('lockin:extend', (_e, minutes) => lockin.extend(minutes));
+
 ipcMain.on('app:quit', () => app.quit());
 ipcMain.handle('login-item:get', () => app.getLoginItemSettings().openAtLogin);
 ipcMain.on('login-item:set', (_e, open) => {
   app.setLoginItemSettings({ openAtLogin: !!open });
 });
 
-app.on('will-quit', () => globalShortcut.unregisterAll());
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
+  lockin.stop(false); // never leave a caffeinate assertion behind
+  calendar.stop();
+});
 
 app.on('window-all-closed', () => app.quit());
