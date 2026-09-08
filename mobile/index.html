@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="miTasks" />
+<meta name="theme-color" content="#141210" />
+<link rel="apple-touch-icon" href="/icon.png" />
+<title>miTasks</title>
+<style>
+@font-face { font-family: "Fraunces"; src: url("/fonts/Fraunces.woff2") format("woff2"); font-weight: 100 900; }
+@font-face { font-family: "Fraunces"; src: url("/fonts/Fraunces-Italic.woff2") format("woff2"); font-weight: 100 900; font-style: italic; }
+@font-face { font-family: "Satoshi"; src: url("/fonts/Satoshi-Variable.woff2") format("woff2"); font-weight: 300 900; }
+
+:root {
+  --serif: "Fraunces", ui-serif, Georgia, serif;
+  --sans: "Satoshi", -apple-system, sans-serif;
+  --bg-hi: #201d18; --bg-lo: #141210;
+  --ink: #f0eadd;
+  --ink-2: rgba(240,234,221,0.56);
+  --ink-3: rgba(240,234,221,0.3);
+  --hair: rgba(240,234,221,0.09);
+  --amber: #d9a441;
+  --amber-soft: rgba(217,164,65,0.14);
+  --clay: #c96f5a;
+  --spring: cubic-bezier(0.34,1.35,0.5,1);
+}
+
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html { background: var(--bg-lo); }
+body {
+  min-height:100vh;
+  background: linear-gradient(172deg, var(--bg-hi), var(--bg-lo) 55%) fixed;
+  font-family: var(--sans); color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  padding: calc(env(safe-area-inset-top) + 18px) 20px calc(env(safe-area-inset-bottom) + 96px);
+  -webkit-user-select:none; user-select:none;
+}
+button { font-family:inherit; border:none; background:none; color:inherit; }
+button svg { display:block; }
+[hidden] { display:none !important; }
+
+header { display:flex; align-items:flex-start; gap:10px; }
+.head-text { flex:1; }
+h1 { font-family:var(--serif); font-size:27px; font-weight:600; letter-spacing:-0.3px; }
+#date-line { margin-top:5px; font-size:10.5px; font-weight:700; letter-spacing:1.6px; text-transform:uppercase; color:var(--ink-3); }
+.head-btn {
+  width:36px; height:36px; border-radius:10px; margin-top:2px;
+  display:flex; align-items:center; justify-content:center; color:var(--ink-3);
+}
+.head-btn.active { color:var(--amber); background:var(--amber-soft); }
+#conn { width:8px; height:8px; border-radius:50%; margin-top:15px; background:var(--clay); transition:background .3s; }
+#conn.on { background:#8fa876; }
+
+#progress-strip { display:flex; align-items:center; gap:10px; margin-top:18px; }
+#progress-track { flex:1; height:3px; border-radius:2px; background:rgba(240,234,221,0.1); overflow:hidden; }
+#progress-fill { height:100%; width:0%; border-radius:2px; background:var(--amber); transition:width .5s var(--spring); }
+#progress-text { font-size:11px; font-weight:700; color:var(--ink-2); white-space:nowrap; }
+
+/* Focus strip */
+#focus-strip {
+  display:flex; align-items:center; gap:10px; margin-top:16px; padding:11px 14px;
+  border:1px solid rgba(217,164,65,0.45); border-radius:12px; background:var(--amber-soft);
+}
+.focus-dot { flex:none; width:7px; height:7px; border-radius:50%; background:var(--amber); animation:blink 1.6s ease infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.35} }
+#focus-task { flex:1; min-width:0; font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#focus-time { font-family:var(--serif); font-size:16px; font-weight:600; color:var(--amber); font-variant-numeric:tabular-nums; }
+#focus-stop { width:28px; height:28px; border-radius:8px; display:flex; align-items:center; justify-content:center; color:var(--amber); }
+
+#chip-row { display:flex; flex-wrap:wrap; gap:7px; margin-top:18px; }
+.chip {
+  display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 14px;
+  border-radius:16px; border:1px solid var(--hair); color:var(--ink-2);
+  font-size:11px; font-weight:700; letter-spacing:0.7px; text-transform:uppercase;
+}
+.chip.active { border-color:rgba(217,164,65,0.6); background:var(--amber-soft); color:var(--ink); }
+.chip.ghost { color:var(--ink-3); }
+.dot { width:6px; height:6px; border-radius:50%; flex:none; }
+#label-input {
+  height:32px; width:130px; padding:0 12px; border-radius:16px;
+  border:1px solid rgba(217,164,65,0.55); background:rgba(0,0,0,0.3);
+  color:var(--ink); font-size:12px; font-family:var(--sans); outline:none;
+  -webkit-user-select:text; user-select:text;
+}
+
+ul { list-style:none; margin-top:10px; }
+.task { display:flex; align-items:center; gap:14px; padding:15px 2px; border-bottom:1px solid rgba(240,234,221,0.06); animation:in .28s var(--spring); }
+@keyframes in { from{transform:translateY(-7px);opacity:0} to{transform:none;opacity:1} }
+.task.completing { transform:translateX(14px); opacity:0; transition:all .3s ease; }
+.checkbox {
+  flex:none; width:26px; height:26px; border-radius:50%;
+  border:1.6px solid rgba(240,234,221,0.3);
+  display:flex; align-items:center; justify-content:center; color:transparent;
+  transition:all .2s var(--spring);
+}
+.checkbox svg { width:12px; height:12px; }
+.task.done .checkbox, .task.completing .checkbox { background:var(--amber); border-color:var(--amber); color:#17140e; }
+.task-body { flex:1; min-width:0; }
+.task-text { font-size:15px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.task.done { opacity:.42; }
+.task.done .task-text { text-decoration:line-through; }
+.task-meta { display:flex; align-items:center; flex-wrap:wrap; gap:4px 10px; margin-top:4px; }
+.meta-item { display:inline-flex; align-items:center; gap:4px; font-size:10px; font-weight:700; letter-spacing:0.8px; text-transform:uppercase; color:var(--ink-2); }
+.flag-high { color:var(--clay); } .flag-med { color:var(--amber); }
+.m-overdue { color:var(--clay); } .m-today { color:var(--amber); }
+.del { flex:none; width:30px; height:30px; border-radius:9px; display:flex; align-items:center; justify-content:center; color:var(--ink-3); }
+.del.confirm { background:rgba(201,111,90,0.2); color:var(--clay); }
+
+#done-header { display:flex; align-items:center; justify-content:space-between; margin-top:22px; padding:6px 2px; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:1.4px; color:var(--ink-3); }
+#clear-done { font-size:11px; font-weight:700; color:var(--ink-3); padding:4px 10px; border-radius:8px; text-transform:none; letter-spacing:.2px; }
+#clear-done.confirm { background:rgba(201,111,90,0.2); color:var(--clay); }
+
+#empty { text-align:center; padding:60px 20px; }
+#empty .t { font-family:var(--serif); font-style:italic; font-size:21px; }
+#empty .s { margin-top:8px; font-size:13px; color:var(--ink-2); }
+
+/* Notes view */
+.note-card {
+  padding:15px 16px; margin-top:10px; border:1px solid var(--hair); border-radius:15px;
+  background: linear-gradient(178deg, rgba(240,234,221,0.045), rgba(240,234,221,0.01));
+  animation:in .26s var(--spring);
+}
+.note-title { font-family:var(--serif); font-size:17px; font-weight:600; }
+.note-preview { margin-top:6px; font-size:12.5px; line-height:1.5; color:var(--ink-2); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.note-meta { display:flex; align-items:center; gap:5px; margin-top:9px; font-size:9.5px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--ink-3); }
+
+/* Bottom add bar */
+#add-bar {
+  position:fixed; left:0; right:0; bottom:0; z-index:20;
+  padding:10px 20px calc(env(safe-area-inset-bottom) + 12px);
+  background:rgba(20,18,16,0.92);
+  -webkit-backdrop-filter:blur(18px); backdrop-filter:blur(18px);
+  border-top:1px solid var(--hair);
+}
+#parse-hint { font-size:10px; font-weight:700; letter-spacing:.7px; text-transform:uppercase; color:var(--amber); padding:0 2px 8px; }
+.add-row { display:flex; gap:9px; }
+#task-input {
+  flex:1; height:46px; padding:0 15px;
+  border:1px solid var(--hair); border-radius:13px; background:rgba(0,0,0,0.3);
+  color:var(--ink); font-size:15px; font-family:var(--sans); outline:none;
+  -webkit-user-select:text; user-select:text;
+}
+#task-input::placeholder { font-family:var(--serif); font-style:italic; color:var(--ink-3); }
+#task-input:focus { border-color:rgba(217,164,65,0.55); }
+#add-btn { flex:none; width:46px; height:46px; border-radius:13px; background:var(--amber); color:#17140e; display:flex; align-items:center; justify-content:center; }
+#add-btn:active { transform:scale(0.92); }
+
+/* Bottom sheet */
+#backdrop { position:fixed; inset:0; z-index:30; background:rgba(0,0,0,0.5); animation:fade .2s ease; }
+@keyframes fade { from{opacity:0} to{opacity:1} }
+#sheet {
+  position:fixed; left:0; right:0; bottom:0; z-index:31;
+  max-height:86vh; overflow-y:auto;
+  background:linear-gradient(178deg, var(--bg-hi), var(--bg-lo) 70%);
+  border-radius:22px 22px 0 0; border-top:1px solid rgba(240,234,221,0.13);
+  padding:10px 22px calc(env(safe-area-inset-bottom) + 22px);
+  animation:up .3s var(--spring);
+}
+@keyframes up { from{transform:translateY(60%);opacity:.4} to{transform:none;opacity:1} }
+.grab { width:38px; height:4px; border-radius:2px; background:rgba(240,234,221,0.18); margin:4px auto 16px; }
+.sheet-title {
+  width:100%; border:none; background:transparent;
+  font-family:var(--serif); font-size:20px; font-weight:600; color:var(--ink);
+  border-bottom:1px solid rgba(240,234,221,0.12); padding:4px 0 12px; outline:none;
+  -webkit-user-select:text; user-select:text;
+}
+.sheet-title:focus { border-bottom-color:rgba(217,164,65,0.5); }
+.srow { display:flex; align-items:center; gap:10px; margin-top:16px; flex-wrap:wrap; }
+.slabel { width:100%; font-size:10px; font-weight:700; letter-spacing:1.2px; text-transform:uppercase; color:var(--ink-3); }
+.seg { display:inline-flex; border:1px solid var(--hair); border-radius:11px; overflow:hidden; }
+.seg button { padding:9px 14px; font-size:11px; font-weight:700; letter-spacing:.6px; text-transform:uppercase; color:var(--ink-2); border-right:1px solid var(--hair); }
+.seg button:last-child { border-right:none; }
+.seg button.on { background:rgba(240,234,221,0.09); color:var(--ink); }
+.seg button.on.amber { background:var(--amber-soft); color:var(--amber); }
+.seg button.on.clay { background:rgba(201,111,90,0.16); color:var(--clay); }
+input[type="date"], input[type="datetime-local"] {
+  color-scheme:dark; padding:9px 12px; border:1px solid var(--hair); border-radius:11px;
+  background:rgba(0,0,0,0.25); color:var(--ink); font-size:14px; font-family:var(--sans); outline:none;
+}
+.sheet textarea, #sheet textarea {
+  width:100%; min-height:90px; margin-top:8px; padding:11px 13px;
+  border:1px solid var(--hair); border-radius:12px; background:rgba(0,0,0,0.25);
+  color:var(--ink); font-size:14px; line-height:1.55; font-family:var(--sans);
+  resize:none; outline:none; -webkit-user-select:text; user-select:text;
+}
+#sheet textarea:focus { border-color:rgba(217,164,65,0.45); }
+.sheet-actions { display:flex; gap:10px; margin-top:22px; }
+.act {
+  flex:1; height:44px; border-radius:12px; border:1px solid var(--hair);
+  display:flex; align-items:center; justify-content:center; gap:8px;
+  font-size:11px; font-weight:800; letter-spacing:.7px; text-transform:uppercase; color:var(--ink-2);
+}
+.act.amber { border-color:rgba(217,164,65,0.5); color:var(--amber); }
+.act.amber.fill { background:var(--amber); border-color:var(--amber); color:#17140e; }
+.act.clay { border-color:rgba(201,111,90,0.5); color:var(--clay); }
+.act.clay.confirm { background:rgba(201,111,90,0.2); }
+.xbtn { width:40px; height:40px; border-radius:11px; border:1px solid var(--hair); display:flex; align-items:center; justify-content:center; color:var(--ink-3); }
+</style>
+</head>
+<body>
+  <header>
+    <div class="head-text">
+      <h1 id="view-title">miTasks</h1>
+      <p id="date-line"></p>
+    </div>
+    <button class="head-btn" id="notes-toggle" aria-label="Notes">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+    </button>
+    <div id="conn"></div>
+  </header>
+
+  <div id="progress-strip" hidden>
+    <div id="progress-track"><div id="progress-fill"></div></div>
+    <span id="progress-text"></span>
+  </div>
+
+  <div id="focus-strip" hidden>
+    <span class="focus-dot"></span>
+    <span id="focus-task"></span>
+    <b id="focus-time"></b>
+    <button id="focus-stop" aria-label="Stop focus">
+      <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+    </button>
+  </div>
+
+  <div id="chip-row"></div>
+
+  <div id="tasks-view">
+    <ul id="pending"></ul>
+    <div id="empty" hidden>
+      <p class="t">All clear.</p>
+      <p class="s">Enjoy the quiet — or capture the next thing.</p>
+    </div>
+    <div id="done-header" hidden>
+      <span>Done · <b id="done-count">0</b></span>
+      <button id="clear-done">Clear</button>
+    </div>
+    <ul id="done"></ul>
+  </div>
+
+  <div id="notes-view" hidden>
+    <ul id="note-list"></ul>
+    <div id="notes-empty" hidden style="text-align:center;padding:60px 20px;">
+      <p style="font-family:var(--serif);font-style:italic;font-size:21px;">Nothing prepared.</p>
+      <p style="margin-top:8px;font-size:13px;color:var(--ink-2);">One card per topic you'll talk about.</p>
+    </div>
+  </div>
+
+  <div id="add-bar">
+    <div id="parse-hint" hidden></div>
+    <div class="add-row">
+      <input id="task-input" type="text" placeholder="What needs doing?" autocomplete="off" />
+      <button id="add-btn" aria-label="Add">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div id="backdrop" hidden></div>
+  <div id="sheet" hidden></div>
+
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+const PRIORITY_RANK = { high: 0, med: 1 };
+const FAR = 8.64e15;
+const DAY = 86400000;
+const WEEKDAYS = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+const REPEAT_LABEL = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' };
+
+let state = { tasks: [], labels: [], notes: [], focus: null, focusMinutes: 25 };
+let activeLabel = null;
+let view = 'tasks'; // 'tasks' | 'notes'
+let confirmDelId = null;
+let clearConfirm = false;
+let sheetTaskId = null;
+let sheetNoteId = null;
+let noteSaveTimer = null;
+
+const checkSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg>';
+const flagSvg = '<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15" fill="none"/></svg>';
+const clockSvg = '<svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
+const repeatSvg = '<svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>';
+const noteGlyph = '<svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h9"/></svg>';
+const xSvg = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+const playSvg = '<svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><path d="M6 4l14 8-14 8z"/></svg>';
+const stopSvg = '<svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>';
+
+/* ---------- helpers ---------- */
+const pad = (n) => String(n).padStart(2, '0');
+const toDateStr = (d) => d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
+const toDT = (d) => toDateStr(d) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+function startOfToday() { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); }
+function dayDiff(ts) { return Math.floor((ts - startOfToday()) / DAY); }
+function dueValue(t) { if (!t.due) return FAR; const v = Date.parse(t.due + 'T00:00:00'); return Number.isFinite(v) ? v : FAR; }
+function labelFor(name) { return state.labels.find((l) => l.name === name) || null; }
+
+function dueChip(due) {
+  const ts = Date.parse(due + 'T00:00:00');
+  if (!Number.isFinite(ts)) return null;
+  const diff = dayDiff(ts);
+  const short = new Date(ts).toLocaleDateString(undefined, { month:'short', day:'numeric' });
+  if (diff < 0) return { text: 'Overdue · ' + short, cls: 'm-overdue' };
+  if (diff === 0) return { text: 'Today', cls: 'm-today' };
+  if (diff === 1) return { text: 'Tomorrow', cls: '' };
+  return { text: short, cls: '' };
+}
+function startChip(startAt) {
+  const ts = Date.parse(startAt);
+  if (!Number.isFinite(ts)) return null;
+  const d = new Date(ts);
+  const time = d.toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' });
+  const diff = dayDiff(ts);
+  if (ts <= Date.now()) return { text: 'Started · ' + time, cls: 'm-today' };
+  if (diff === 0) return { text: time, cls: '' };
+  if (diff === 1) return { text: 'Tomorrow · ' + time, cls: '' };
+  return { text: d.toLocaleDateString(undefined,{month:'short',day:'numeric'}) + ' · ' + time, cls: '' };
+}
+function fmtMin(ms) { const m = Math.round(ms/60000); return m < 60 ? m+'m' : Math.floor(m/60)+'h '+(m%60)+'m'; }
+
+async function api(method, url, body) {
+  return fetch(url, {
+    method,
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+}
+const patchTask = (id, fields) => api('PATCH', '/api/tasks/' + id, fields);
+function patchAndRefresh(id, fields) {
+  const task = state.tasks.find((t) => t.id === id);
+  if (task) Object.assign(task, fields);
+  patchTask(id, fields);
+  openTaskSheet(id);
+  render();
+}
+
+/* ---------- natural-language quick add (parity with desktop) ---------- */
+function parseQuickAdd(raw) {
+  let text = ' ' + raw + ' ';
+  const out = { priority:null, due:null, startAt:null, label:activeLabel, repeat:null };
+  const eat = (s) => { text = text.replace(s, ' '); };
+  let m;
+  if ((m = text.match(/\s!(high|h)(?=\s)/i))) { out.priority='high'; eat(m[0]); }
+  else if ((m = text.match(/\s!(med|medium|m)(?=\s)/i))) { out.priority='med'; eat(m[0]); }
+  if ((m = text.match(/\s@([\w-]+)/))) {
+    const q = m[1].toLowerCase();
+    const found = state.labels.find((l) => l.name.toLowerCase().replace(/\s+/g,'').startsWith(q));
+    if (found) { out.label = found.name; eat(m[0]); }
+  }
+  let repeatWeekday = null;
+  if ((m = text.match(/\severy\s?(day|week|month|monday|tuesday|wednesday|thursday|friday|saturday|sunday)(?=\s)/i))) {
+    const w = m[1].toLowerCase();
+    out.repeat = w === 'day' ? 'daily' : w === 'month' ? 'monthly' : 'weekly';
+    if (WEEKDAYS.includes(w)) repeatWeekday = w;
+    eat(m[0]);
+  }
+  let dateBase = null;
+  if ((m = text.match(/\s(today|tonight)(?=\s)/i))) { dateBase = new Date(); eat(m[0]); }
+  else if ((m = text.match(/\s(tomorrow|tmrw|tmr)(?=\s)/i))) { dateBase = new Date(Date.now()+DAY); eat(m[0]); }
+  else if ((m = text.match(/\sin (\d{1,2}) days?(?=\s)/i))) { dateBase = new Date(Date.now()+parseInt(m[1],10)*DAY); eat(m[0]); }
+  else if ((m = text.match(/\s(?:on |next )?(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)(?=\s)/i))) {
+    const q = m[1].toLowerCase();
+    const idx = WEEKDAYS.findIndex((w) => w === q || w.slice(0,3) === q);
+    if (idx >= 0) {
+      let ahead = (idx - new Date().getDay() + 7) % 7;
+      if (ahead === 0) ahead = 7;
+      dateBase = new Date(Date.now() + ahead*DAY);
+      eat(m[0]);
+    }
+  }
+  if (!dateBase && repeatWeekday) {
+    const idx = WEEKDAYS.indexOf(repeatWeekday);
+    let ahead = (idx - new Date().getDay() + 7) % 7;
+    if (ahead === 0) ahead = 7;
+    dateBase = new Date(Date.now() + ahead*DAY);
+  }
+  let timeParts = null;
+  if ((m = text.match(/\s(?:at )?(\d{1,2})(?::(\d{2}))?\s?(am|pm)(?=\s)/i))) {
+    let h = parseInt(m[1],10) % 12;
+    if (m[3].toLowerCase() === 'pm') h += 12;
+    timeParts = [h, m[2] ? parseInt(m[2],10) : 0];
+    eat(m[0]);
+  } else if ((m = text.match(/\s(?:at )?([01]?\d|2[0-3]):([0-5]\d)(?=\s)/))) {
+    timeParts = [parseInt(m[1],10), parseInt(m[2],10)];
+    eat(m[0]);
+  }
+  if (timeParts) {
+    const d = dateBase ? new Date(dateBase) : new Date();
+    d.setHours(timeParts[0], timeParts[1], 0, 0);
+    if (!dateBase && d.getTime() <= Date.now()) d.setTime(d.getTime() + DAY);
+    out.startAt = toDT(d);
+    out.due = toDateStr(d);
+  } else if (dateBase) {
+    out.due = toDateStr(dateBase);
+  }
+  out.text = text.replace(/\s+/g, ' ').trim();
+  return out;
+}
+
+function renderParseHint() {
+  const raw = $('task-input').value;
+  const hint = $('parse-hint');
+  if (view !== 'tasks' || !raw.trim()) { hint.hidden = true; return; }
+  const p = parseQuickAdd(raw);
+  const bits = [];
+  if (p.priority) bits.push(p.priority === 'high' ? '⚑ High' : '⚑ Medium');
+  if (p.startAt) { const i = startChip(p.startAt); if (i) bits.push('Starts ' + i.text.replace('Started · ','')); }
+  else if (p.due) { const i = dueChip(p.due); if (i) bits.push('Due ' + i.text); }
+  if (p.repeat) bits.push('↻ ' + REPEAT_LABEL[p.repeat]);
+  if (p.label && p.label !== activeLabel) bits.push(p.label);
+  hint.hidden = bits.length === 0;
+  hint.textContent = bits.join('  ·  ');
+}
+
+/* ---------- rendering ---------- */
+function renderChips() {
+  const chipRow = $('chip-row');
+  chipRow.textContent = '';
+  const mk = (name, color, isActive, onTap) => {
+    const c = document.createElement('button');
+    c.className = 'chip' + (isActive ? ' active' : '');
+    if (color) { const d = document.createElement('span'); d.className = 'dot'; d.style.background = color; c.appendChild(d); }
+    c.appendChild(document.createTextNode(name));
+    c.onclick = onTap;
+    chipRow.appendChild(c);
+    return c;
+  };
+  mk('All', null, activeLabel === null, () => { activeLabel = null; render(); });
+  for (const l of state.labels) {
+    mk(l.name, l.color, activeLabel === l.name, () => { activeLabel = activeLabel === l.name ? null : l.name; render(); });
+  }
+  const add = document.createElement('button');
+  add.className = 'chip ghost';
+  add.textContent = '+ Label';
+  add.onclick = () => {
+    const input = document.createElement('input');
+    input.id = 'label-input';
+    input.placeholder = 'Label name…';
+    input.maxLength = 24;
+    chipRow.replaceChild(input, add);
+    input.focus();
+    const commit = async () => {
+      const name = input.value.trim();
+      if (name) await api('POST', '/api/labels', { name });
+      render();
+    };
+    input.onblur = commit;
+    input.onkeydown = (e) => { if (e.key === 'Enter') input.blur(); };
+  };
+  chipRow.appendChild(add);
+}
+
+function taskRow(task) {
+  const li = document.createElement('li');
+  li.className = 'task' + (task.done ? ' done' : '');
+
+  const cb = document.createElement('button');
+  cb.className = 'checkbox';
+  cb.innerHTML = checkSvg;
+  cb.onclick = (e) => {
+    e.stopPropagation();
+    if (!task.done) {
+      li.classList.add('completing');
+      setTimeout(() => api('POST', '/api/tasks/' + task.id + '/toggle'), 260);
+    } else {
+      api('POST', '/api/tasks/' + task.id + '/toggle');
+    }
+  };
+
+  const body = document.createElement('div');
+  body.className = 'task-body';
+  body.onclick = () => openTaskSheet(task.id);
+  const text = document.createElement('div');
+  text.className = 'task-text';
+  text.textContent = task.text;
+  body.appendChild(text);
+
+  const meta = document.createElement('div');
+  meta.className = 'task-meta';
+  const chip = (cls, html, txt) => {
+    const s = document.createElement('span');
+    s.className = 'meta-item ' + cls;
+    if (html) s.innerHTML = html;
+    if (txt) s.appendChild(document.createTextNode(txt));
+    meta.appendChild(s);
+  };
+  if (task.priority) chip('flag-' + task.priority, flagSvg, task.priority === 'high' ? 'High' : 'Medium');
+  if (task.startAt) { const i = startChip(task.startAt); if (i) chip(i.cls, clockSvg, i.text); }
+  if (task.due) { const i = dueChip(task.due); if (i) chip(i.cls, null, i.text); }
+  if (task.repeat) chip('', repeatSvg, REPEAT_LABEL[task.repeat]);
+  if (task.focusedMs) chip('', null, fmtMin(task.focusedMs));
+  const label = labelFor(task.label);
+  if (label && !activeLabel) {
+    const s = document.createElement('span');
+    s.className = 'meta-item';
+    const d = document.createElement('span'); d.className = 'dot'; d.style.background = label.color;
+    s.appendChild(d); s.appendChild(document.createTextNode(label.name));
+    meta.appendChild(s);
+  }
+  if (task.notes && task.notes.trim()) chip('', noteGlyph, null);
+  if (meta.childNodes.length) body.appendChild(meta);
+
+  const del = document.createElement('button');
+  del.className = 'del' + (confirmDelId === task.id ? ' confirm' : '');
+  del.innerHTML = xSvg;
+  del.onclick = (e) => {
+    e.stopPropagation();
+    if (confirmDelId === task.id) {
+      confirmDelId = null;
+      api('DELETE', '/api/tasks/' + task.id);
+    } else {
+      confirmDelId = task.id;
+      render();
+      setTimeout(() => { if (confirmDelId === task.id) { confirmDelId = null; render(); } }, 3000);
+    }
+  };
+
+  li.append(cb, body, del);
+  return li;
+}
+
+function renderTasks() {
+  const visible = activeLabel ? state.tasks.filter((t) => t.label === activeLabel) : state.tasks;
+  const pending = visible.filter((t) => !t.done).sort((a,b) =>
+    (PRIORITY_RANK[a.priority] ?? 2) - (PRIORITY_RANK[b.priority] ?? 2) ||
+    dueValue(a) - dueValue(b) || b.createdAt - a.createdAt);
+  const done = visible.filter((t) => t.done).sort((a,b) => (b.doneAt||0)-(a.doneAt||0));
+
+  const doneCount = done.length;
+  $('progress-strip').hidden = visible.length === 0;
+  $('progress-fill').style.width = (visible.length ? (doneCount/visible.length)*100 : 0) + '%';
+  $('progress-text').textContent = activeLabel
+    ? doneCount + ' of ' + visible.length + ' · ' + activeLabel
+    : doneCount + ' of ' + visible.length + ' done';
+
+  const p = $('pending'); p.textContent = '';
+  for (const t of pending) p.appendChild(taskRow(t));
+  const d = $('done'); d.textContent = '';
+  for (const t of done.slice(0, 30)) d.appendChild(taskRow(t));
+
+  $('done-header').hidden = done.length === 0;
+  $('done-count').textContent = done.length;
+  const cd = $('clear-done');
+  cd.className = clearConfirm ? 'confirm' : '';
+  cd.textContent = clearConfirm ? 'Sure?' : 'Clear';
+  $('empty').hidden = !(pending.length === 0 && done.length === 0);
+  $('task-input').placeholder = activeLabel ? 'Add to ' + activeLabel + '…' : 'What needs doing?';
+}
+
+function renderNotes() {
+  const list = $('note-list');
+  list.textContent = '';
+  const notes = state.notes
+    .filter((n) => (activeLabel ? n.label === activeLabel : true))
+    .sort((a,b) => (b.updatedAt||0)-(a.updatedAt||0));
+  $('notes-empty').hidden = notes.length > 0;
+  for (const n of notes) {
+    const li = document.createElement('li');
+    li.className = 'note-card';
+    const t = document.createElement('p');
+    t.className = 'note-title';
+    t.textContent = (n.title || '').trim() || 'Untitled';
+    li.appendChild(t);
+    const preview = (n.body || '').trim();
+    if (preview) {
+      const pv = document.createElement('p');
+      pv.className = 'note-preview';
+      pv.textContent = preview;
+      li.appendChild(pv);
+    }
+    const meta = document.createElement('p');
+    meta.className = 'note-meta';
+    const label = labelFor(n.label);
+    if (label && !activeLabel) {
+      const d = document.createElement('span'); d.className = 'dot'; d.style.background = label.color;
+      meta.appendChild(d);
+      meta.appendChild(document.createTextNode(label.name + '  ·  '));
+    }
+    const diff = dayDiff(n.updatedAt || 0);
+    meta.appendChild(document.createTextNode(diff >= 0 ? 'Today' : diff === -1 ? 'Yesterday'
+      : new Date(n.updatedAt).toLocaleDateString(undefined,{month:'short',day:'numeric'})));
+    li.appendChild(meta);
+    li.onclick = () => openNoteSheet(n.id);
+    list.appendChild(li);
+  }
+}
+
+function renderFocus() {
+  const strip = $('focus-strip');
+  const f = state.focus;
+  const task = f && state.tasks.find((t) => t.id === f.taskId && !t.done);
+  strip.hidden = !task;
+  if (!task) return;
+  $('focus-task').textContent = task.text;
+  const secs = Math.max(0, Math.ceil((f.endAt - Date.now())/1000));
+  $('focus-time').textContent = Math.floor(secs/60) + ':' + pad(secs%60);
+}
+
+function render() {
+  $('view-title').textContent = view === 'notes' ? 'Notes' : 'miTasks';
+  $('notes-toggle').classList.toggle('active', view === 'notes');
+  $('tasks-view').hidden = view !== 'tasks';
+  $('notes-view').hidden = view !== 'notes';
+  $('task-input').placeholder = view === 'notes' ? 'New topic…' : 'What needs doing?';
+  $('progress-strip').hidden = true;
+  renderChips();
+  renderFocus();
+  if (view === 'tasks') renderTasks();
+  else renderNotes();
+}
+
+/* ---------- task sheet ---------- */
+function el(tag, cls, txt) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (txt) e.textContent = txt;
+  return e;
+}
+
+function seg(options, current, onPick) {
+  const s = el('div', 'seg');
+  for (const [text, value, tone] of options) {
+    const b = el('button', null, text);
+    if (current === value) b.className = 'on' + (tone ? ' ' + tone : '');
+    b.onclick = () => onPick(value);
+    s.appendChild(b);
+  }
+  return s;
+}
+
+function closeSheet() {
+  $('sheet').hidden = true;
+  $('backdrop').hidden = true;
+  sheetTaskId = null;
+  sheetNoteId = null;
+}
+
+function openTaskSheet(id) {
+  const task = state.tasks.find((t) => t.id === id);
+  if (!task) return;
+  sheetTaskId = id;
+  sheetNoteId = null;
+  const sheet = $('sheet');
+  sheet.textContent = '';
+  sheet.appendChild(el('div', 'grab'));
+
+  const title = document.createElement('input');
+  title.className = 'sheet-title';
+  title.value = task.text;
+  title.maxLength = 200;
+  title.onchange = () => { const v = title.value.trim(); if (v) patchTask(id, { text: v }); };
+  sheet.appendChild(title);
+
+  // Label
+  const lrow = el('div', 'srow');
+  lrow.appendChild(el('span', 'slabel', 'Label'));
+  const mkL = (name, color, isOn, value) => {
+    const c = el('button', 'chip' + (isOn ? ' active' : ''));
+    if (color) { const d = el('span', 'dot'); d.style.background = color; c.appendChild(d); }
+    c.appendChild(document.createTextNode(name));
+    c.onclick = () => patchAndRefresh(id, { label: value });
+    lrow.appendChild(c);
+  };
+  mkL('None', null, !task.label, null);
+  for (const l of state.labels) mkL(l.name, l.color, task.label === l.name, l.name);
+  sheet.appendChild(lrow);
+
+  // Priority
+  const prow = el('div', 'srow');
+  prow.appendChild(el('span', 'slabel', 'Priority'));
+  prow.appendChild(seg(
+    [['None', null], ['Medium', 'med', 'amber'], ['High', 'high', 'clay']],
+    task.priority || null,
+    (v) => patchAndRefresh(id, { priority: v })
+  ));
+  sheet.appendChild(prow);
+
+  // Repeat
+  const rrow = el('div', 'srow');
+  rrow.appendChild(el('span', 'slabel', 'Repeat'));
+  rrow.appendChild(seg(
+    [['Off', null], ['Daily', 'daily'], ['Weekly', 'weekly'], ['Monthly', 'monthly']],
+    task.repeat || null,
+    (v) => patchAndRefresh(id, { repeat: v })
+  ));
+  sheet.appendChild(rrow);
+
+  // Starts
+  const srow = el('div', 'srow');
+  srow.appendChild(el('span', 'slabel', 'Starts — reminder fires then'));
+  const start = document.createElement('input');
+  start.type = 'datetime-local';
+  start.value = task.startAt || '';
+  start.onchange = () => patchAndRefresh(id, { startAt: start.value || null });
+  srow.appendChild(start);
+  if (task.startAt) {
+    const x = el('button', 'xbtn'); x.innerHTML = xSvg;
+    x.onclick = () => patchAndRefresh(id, { startAt: null });
+    srow.appendChild(x);
+  }
+  sheet.appendChild(srow);
+
+  // Deadline
+  const drow = el('div', 'srow');
+  drow.appendChild(el('span', 'slabel', 'Deadline'));
+  const due = document.createElement('input');
+  due.type = 'date';
+  due.value = task.due || '';
+  due.onchange = () => patchAndRefresh(id, { due: due.value || null });
+  drow.appendChild(due);
+  if (task.due) {
+    const x = el('button', 'xbtn'); x.innerHTML = xSvg;
+    x.onclick = () => patchAndRefresh(id, { due: null });
+    drow.appendChild(x);
+  }
+  sheet.appendChild(drow);
+
+  // Notes
+  const nrow = el('div', 'srow');
+  nrow.appendChild(el('span', 'slabel', 'Notes'));
+  sheet.appendChild(nrow);
+  const notes = document.createElement('textarea');
+  notes.placeholder = 'Add notes…';
+  notes.value = task.notes || '';
+  let nt = null;
+  notes.oninput = () => {
+    clearTimeout(nt);
+    nt = setTimeout(() => patchTask(id, { notes: notes.value }), 600);
+  };
+  sheet.appendChild(notes);
+
+  // Actions
+  const actions = el('div', 'sheet-actions');
+  const isFocused = state.focus && state.focus.taskId === id;
+  const focusBtn = el('button', 'act amber' + (isFocused ? '' : ' fill'));
+  focusBtn.innerHTML = (isFocused ? stopSvg : playSvg);
+  focusBtn.appendChild(document.createTextNode(
+    isFocused ? ' Stop session' : ' Focus · ' + state.focusMinutes + ' min'
+  ));
+  focusBtn.onclick = async () => {
+    if (isFocused) await api('DELETE', '/api/focus');
+    else await api('POST', '/api/focus', { taskId: id });
+    closeSheet();
+  };
+  const delBtn = el('button', 'act clay', 'Delete');
+  let armed = false;
+  delBtn.onclick = async () => {
+    if (!armed) { armed = true; delBtn.classList.add('confirm'); delBtn.textContent = 'Sure?'; return; }
+    await api('DELETE', '/api/tasks/' + id);
+    closeSheet();
+  };
+  actions.append(focusBtn, delBtn);
+  sheet.appendChild(actions);
+
+  $('backdrop').hidden = false;
+  sheet.hidden = false;
+}
+
+/* ---------- note sheet ---------- */
+function openNoteSheet(id) {
+  const note = state.notes.find((n) => n.id === id);
+  if (!note) return;
+  sheetNoteId = id;
+  sheetTaskId = null;
+  const sheet = $('sheet');
+  sheet.textContent = '';
+  sheet.appendChild(el('div', 'grab'));
+
+  const title = document.createElement('input');
+  title.className = 'sheet-title';
+  title.placeholder = 'Topic…';
+  title.value = note.title || '';
+  title.maxLength = 120;
+  title.oninput = () => {
+    clearTimeout(noteSaveTimer);
+    noteSaveTimer = setTimeout(() => api('PATCH', '/api/notes/' + id, { title: title.value }), 600);
+  };
+  sheet.appendChild(title);
+
+  const body = document.createElement('textarea');
+  body.placeholder = 'Everything you want to say about it…';
+  body.style.minHeight = '40vh';
+  body.value = note.body || '';
+  body.oninput = () => {
+    clearTimeout(noteSaveTimer);
+    noteSaveTimer = setTimeout(() => api('PATCH', '/api/notes/' + id, { title: title.value, body: body.value }), 600);
+  };
+  sheet.appendChild(body);
+
+  const actions = el('div', 'sheet-actions');
+  const copyBtn = el('button', 'act amber', 'Copy');
+  copyBtn.onclick = async () => {
+    try {
+      await navigator.clipboard.writeText([title.value.trim(), body.value.trim()].filter(Boolean).join('\n\n'));
+      copyBtn.textContent = 'Copied';
+      setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
+    } catch { /* clipboard unavailable */ }
+  };
+  const delBtn = el('button', 'act clay', 'Delete');
+  let armed = false;
+  delBtn.onclick = async () => {
+    if (!armed) { armed = true; delBtn.classList.add('confirm'); delBtn.textContent = 'Sure?'; return; }
+    await api('DELETE', '/api/notes/' + id);
+    closeSheet();
+  };
+  actions.append(copyBtn, delBtn);
+  sheet.appendChild(actions);
+
+  $('backdrop').hidden = false;
+  sheet.hidden = false;
+}
+
+/* ---------- add ---------- */
+async function addFromBar() {
+  const input = $('task-input');
+  const raw = input.value.trim();
+  if (!raw) return;
+  input.value = '';
+  $('parse-hint').hidden = true;
+  if (view === 'notes') {
+    const res = await api('POST', '/api/notes', { title: raw, label: activeLabel });
+    try {
+      const { id } = await res.json();
+      // open once state refreshes
+      setTimeout(() => { if (state.notes.find((n) => n.id === id)) openNoteSheet(id); }, 400);
+    } catch { /* list will refresh via SSE */ }
+  } else {
+    const p = parseQuickAdd(raw);
+    if (!p.text) return;
+    await api('POST', '/api/tasks', {
+      text: p.text, label: p.label, priority: p.priority,
+      due: p.due, startAt: p.startAt, repeat: p.repeat,
+    });
+  }
+}
+
+/* ---------- live sync ---------- */
+function adopt(s) {
+  state = s;
+  // keep an open sheet in sync only if its item vanished
+  if (sheetTaskId && !state.tasks.find((t) => t.id === sheetTaskId)) closeSheet();
+  if (sheetNoteId && !state.notes.find((n) => n.id === sheetNoteId)) closeSheet();
+  render();
+}
+
+function connectEvents() {
+  const es = new EventSource('/api/events');
+  es.onopen = () => $('conn').classList.add('on');
+  es.onmessage = (e) => {
+    try { adopt(JSON.parse(e.data)); $('conn').classList.add('on'); } catch { /* skip bad frame */ }
+  };
+  es.onerror = () => {
+    $('conn').classList.remove('on');
+    es.close();
+    setTimeout(connectEvents, 3000);
+  };
+}
+
+/* ---------- wiring ---------- */
+$('add-btn').onclick = addFromBar;
+$('task-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') addFromBar(); });
+$('task-input').addEventListener('input', renderParseHint);
+$('notes-toggle').onclick = () => { view = view === 'notes' ? 'tasks' : 'notes'; render(); };
+$('backdrop').onclick = closeSheet;
+$('focus-stop').onclick = () => api('DELETE', '/api/focus');
+$('clear-done').onclick = () => {
+  if (clearConfirm) { clearConfirm = false; api('POST', '/api/clear-done'); }
+  else {
+    clearConfirm = true; render();
+    setTimeout(() => { if (clearConfirm) { clearConfirm = false; render(); } }, 3000);
+  }
+};
+
+$('date-line').textContent = new Date().toLocaleDateString(undefined, { weekday:'long', month:'long', day:'numeric' });
+setInterval(renderFocus, 1000);
+fetch('/api/state').then((r) => r.json()).then(adopt);
+connectEvents();
+</script>
+</body>
+</html>
