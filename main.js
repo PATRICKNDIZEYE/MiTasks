@@ -499,11 +499,13 @@ app.whenReady().then(() => {
       if (win) win.webContents.send('external-state', state);
     },
     getCalendar: () => calendar.snapshot(),
+    lockin,
   });
 
   // Lock-in and the agenda both feed the menu bar, so they wire up together.
   lockin.init((status) => {
     if (win) win.webContents.send('lockin-state', status);
+    if (syncServer) syncServer.broadcast();
     updateTray();
   });
 

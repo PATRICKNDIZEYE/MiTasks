@@ -85,7 +85,7 @@ function detectUrls(port, token) {
   return urls;
 }
 
-function startSyncServer({ port, token, getState, commit, getCalendar }) {
+function startSyncServer({ port, token, getState, commit, getCalendar, lockin }) {
   const clients = new Set();
 
   const publicState = () => {
@@ -98,6 +98,9 @@ function startSyncServer({ port, token, getState, commit, getCalendar }) {
       focusMinutes: (state.settings && state.settings.focusMinutes) || 25,
       // The phone gets the agenda read-only; writes still go through the Mac.
       events: (getCalendar ? getCalendar().events : []) || [],
+      lockin: lockin ? lockin.status() : { active: false },
+      settings: state.settings || {},
+      focusLog: Array.isArray(state.focusLog) ? state.focusLog : [],
     };
   };
 
@@ -158,6 +161,18 @@ function startSyncServer({ port, token, getState, commit, getCalendar }) {
       } else {
         res.writeHead(404); res.end();
       }
+      return;
+    }
+
+    // PWA shell: manifest and service worker sit next to index.html.
+    if ((p === '/manifest.webmanifest' || p === '/sw.js') && req.method === 'GET') {
+      const file = path.join(__dirname, 'mobile', path.basename(p));
+      if (!fs.existsSync(file)) { res.writeHead(404); res.end(); return; }
+      res.writeHead(200, {
+        'Content-Type': p.endsWith('.js') ? 'application/javascript' : 'application/manifest+json',
+        'Cache-Control': 'no-cache',
+      });
+      res.end(fs.readFileSync(file));
       return;
     }
 
@@ -303,6 +318,26 @@ function startSyncServer({ port, token, getState, commit, getCalendar }) {
       commit(state);
       broadcast();
       sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    // Lock-in: the phone drives the same caffeinate assertion as the widget.
+    if (p === '/api/lockin' && req.method === 'POST') {
+      if (!lockin) { sendJson(res, 503, { error: 'unavailable' }); return; }
+      const body = await readBody(req);
+      const minutes = Number(body.minutes);
+      if (!Number.isFinite(minutes)) { sendJson(res, 400, { error: 'minutes required' }); return; }
+      const status = body.extend ? lockin.extend(minutes) : lockin.start(minutes, 'phone');
+      broadcast();
+      sendJson(res, 200, status);
+      return;
+    }
+
+    if (p === '/api/lockin' && req.method === 'DELETE') {
+      if (!lockin) { sendJson(res, 503, { error: 'unavailable' }); return; }
+      const status = lockin.stop();
+      broadcast();
+      sendJson(res, 200, status);
       return;
     }
 
