@@ -62,3 +62,8 @@ release/
 
 # compiled native helper (rebuilt by npm run native)
 native/bin/
+
+# Xcode
+ios/**/xcuserdata/
+ios/**/*.xcworkspace/xcuserdata/
+DerivedData/

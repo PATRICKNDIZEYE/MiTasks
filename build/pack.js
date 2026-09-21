@@ -26,12 +26,26 @@ const app = path.join(outDir, `${NAME}.app`);
 const contents = path.join(app, 'Contents');
 const helperSrc = path.join(root, 'native', 'bin', 'mitasks-cal');
 
-// Everything the app needs at runtime. There are no production dependencies,
-// so node_modules stays out of the archive entirely.
+// Everything the app needs at runtime.
 const SHIPPED = [
   'main.js', 'preload.js', 'server.js', 'calendar.js', 'lockin.js',
   'package.json', 'readme.md', 'renderer', 'mobile',
 ];
+
+/// Production dependency closure, resolved from npm rather than hand-listed so
+/// a new transitive dep can't silently go missing from the bundle. Dev deps
+/// (Electron itself, the asar tooling) stay out.
+function prodModules() {
+  const out = execFileSync(
+    'npm', ['ls', '--omit=dev', '--parseable', '--all'],
+    { cwd: root, encoding: 'utf8' }
+  );
+  return out
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.includes('node_modules'))
+    .map((abs) => path.relative(root, abs));
+}
 
 const HELPERS = [
   { from: 'Electron Helper', to: `${NAME} Helper`, name: NAME },
@@ -100,7 +114,7 @@ fs.chmodSync(path.join(resources, 'mitasks-cal'), 0o755);
 const stage = path.join(root, 'release', '.stage');
 fs.rmSync(stage, { recursive: true, force: true });
 fs.mkdirSync(stage, { recursive: true });
-for (const entry of SHIPPED) {
+for (const entry of [...SHIPPED, ...prodModules()]) {
   const from = path.join(root, entry);
   if (fs.existsSync(from)) fs.cpSync(from, path.join(stage, entry), { recursive: true });
 }
