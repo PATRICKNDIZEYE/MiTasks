@@ -6,6 +6,8 @@ struct TodayView: View {
     @State private var activeLabel: String?
     @State private var editing: TaskItem?
     @State private var showLockin = false
+    @StateObject private var dictation = Dictation()
+    @State private var voiceNote: String?
 
     private var parsed: QuickAdd? {
         let raw = draft.trimmingCharacters(in: .whitespaces)
@@ -52,6 +54,7 @@ struct TodayView: View {
             trailing: AnyView(lockinButton)
         ) {
             progress
+            voiceStrip
             if store.state.lockin.active { LockinStrip() }
             if store.state.focus != nil { FocusStrip() }
             addBar
@@ -126,6 +129,16 @@ struct TodayView: View {
                     .font(.system(size: 15))
                     .submitLabel(.done)
                     .onSubmit(commit)
+                Button(action: handleVoice) {
+                    Image(systemName: dictation.isListening ? "mic.fill" : "mic")
+                        .font(.system(size: 15))
+                        .frame(width: 30, height: 30)
+                        .foregroundStyle(dictation.isListening ? Theme.clay : Theme.ink3)
+                        .background(
+                            dictation.isListening ? Theme.clay.opacity(0.14) : .clear,
+                            in: RoundedRectangle(cornerRadius: 9)
+                        )
+                }
                 Button(action: commit) {
                     Image(systemName: "plus")
                         .font(.system(size: 14, weight: .bold))
@@ -178,6 +191,78 @@ struct TodayView: View {
             .foregroundStyle(on ? Theme.bgLo : Theme.ink2)
             .background(on ? Theme.ink : .clear, in: Capsule())
             .overlay(Capsule().stroke(on ? .clear : Theme.hair, lineWidth: 1))
+        }
+    }
+
+    @ViewBuilder
+    private var voiceStrip: some View {
+        let message: String? = {
+            switch dictation.phase {
+            case .idle: return voiceNote
+            case .listening: return dictation.transcript.isEmpty ? "Listening…" : dictation.transcript
+            case .working(let m): return m
+            case .denied(let m): return m
+            }
+        }()
+
+        if let message {
+            HStack(spacing: 9) {
+                Circle()
+                    .fill(dictation.isListening ? Theme.clay : Theme.ink3)
+                    .frame(width: 7, height: 7)
+                Text(message)
+                    .font(.system(size: 12.5))
+                    .lineLimit(2)
+                Spacer(minLength: 0)
+                if dictation.isListening {
+                    Button("Cancel") {
+                        dictation.cancel()
+                        voiceNote = nil
+                    }
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Theme.ink3)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(
+                dictation.isListening ? Theme.clay.opacity(0.08) : Theme.ink.opacity(0.04),
+                in: RoundedRectangle(cornerRadius: 11)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 11)
+                    .stroke(dictation.isListening ? Theme.clay.opacity(0.35) : Theme.hair, lineWidth: 1)
+            )
+            .padding(.top, 14)
+        }
+    }
+
+    private func handleVoice() {
+        Task {
+            if dictation.isListening {
+                let spoken = await dictation.stop()
+                guard !spoken.isEmpty else {
+                    dictation.phase = .idle
+                    flash("Didn't catch that")
+                    return
+                }
+                dictation.phase = .working("Sorting it out…")
+                let verdict = await store.classify(spoken)
+                store.saveSpoken(spoken, verdict: verdict)
+                dictation.phase = .idle
+                flash(verdict.ok ? "Added" : "Added — " + (verdict.error ?? "not classified"))
+            } else {
+                voiceNote = nil
+                await dictation.start()
+            }
+        }
+    }
+
+    private func flash(_ message: String) {
+        voiceNote = message
+        Task {
+            try? await Task.sleep(for: .seconds(3))
+            if voiceNote == message { voiceNote = nil }
         }
     }
 
