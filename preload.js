@@ -27,6 +27,12 @@ contextBridge.exposeInMainWorld('api', {
   onCalendarState: (cb) => ipcRenderer.on('calendar-state', (_e, snap) => cb(snap)),
 
   // Lock-in (caffeinate)
+  dictateStatus: () => ipcRenderer.invoke('dictate:status'),
+  dictateRequest: () => ipcRenderer.invoke('dictate:request'),
+  dictateStart: () => ipcRenderer.invoke('dictate:start'),
+  dictateStop: () => ipcRenderer.invoke('dictate:stop'),
+  classifyVoice: (t) => ipcRenderer.invoke('voice:classify', t),
+  onDictatePartial: (cb) => ipcRenderer.on('dictate-partial', (_e, t) => cb(t)),
   syncQr: (url) => ipcRenderer.invoke('sync:qr', url),
   lockinStatus: () => ipcRenderer.invoke('lockin:status'),
   lockinStart: (minutes, reason) => ipcRenderer.invoke('lockin:start', minutes, reason),
