@@ -140,9 +140,22 @@
       </label>
     </div>
 
+    <div id="voice-strip" hidden>
+      <span class="voice-dot"></span>
+      <span id="voice-text">Listening…</span>
+      <button id="voice-cancel" aria-label="Cancel">Cancel</button>
+    </div>
+
     <div class="quick-add">
       <input id="task-input" type="text" placeholder="What needs doing?" autocomplete="off" spellcheck="false"
              title="Try: send report tomorrow 3pm !high @azul · every monday" />
+      <button id="mic-btn" aria-label="Speak a task" title="Click to speak a task">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3" />
+        </svg>
+      </button>
       <button id="add-btn" aria-label="Add task">
         <svg viewBox="0 0 24 24" width="17" height="17" fill="none"
              stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
@@ -373,6 +386,24 @@
           <p class="setting-note label-note" id="calendar-hint">
             Reads the accounts Calendar.app already has — nothing to sign in to again.
             Untick a calendar to keep it out of your agenda.
+          </p>
+        </section>
+
+        <section>
+          <h3>Voice</h3>
+          <div class="setting-row">
+            <span class="setting-label">Microphone</span>
+            <span class="setting-note" id="dictate-status">Checking…</span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">Jev key</span>
+            <input type="password" id="jev-key" class="setting-input" placeholder="apikey_…"
+                   autocomplete="off" spellcheck="false" />
+          </div>
+          <p class="setting-note label-note">
+            Speech is recognised on this Mac and the audio never leaves it.
+            The transcript is sent to Jev only to work out the label and priority —
+            without a key, dictation still works and the words go in as a plain task.
           </p>
         </section>
 

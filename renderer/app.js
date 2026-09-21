@@ -59,6 +59,12 @@ let lockinState = { active: false };
 
 const $ = (id) => document.getElementById(id);
 const els = {
+  micBtn: $('mic-btn'),
+  voiceStrip: $('voice-strip'),
+  voiceText: $('voice-text'),
+  voiceCancel: $('voice-cancel'),
+  dictateStatus: $('dictate-status'),
+  jevKey: $('jev-key'),
   bubble: $('bubble'),
   bubbleCount: $('bubble-count'),
   bubbleCheck: $('bubble-check'),
@@ -1925,6 +1931,120 @@ function addTask() {
   render();
 }
 
+/* ---------- Voice capture ---------- */
+
+let voiceState = 'idle'; // idle | listening | working
+let voiceTranscript = '';
+
+function setVoiceUI(mode, text) {
+  voiceState = mode;
+  els.micBtn.classList.toggle('on', mode !== 'idle');
+  els.voiceStrip.hidden = mode === 'idle';
+  els.voiceStrip.classList.toggle('working', mode === 'working');
+  if (text != null) els.voiceText.textContent = text;
+}
+
+async function toggleVoice() {
+  if (voiceState === 'working') return;
+  if (voiceState === 'listening') { await finishVoice(); return; }
+
+  const status = await window.api.dictateStatus();
+  if (status.speech !== 'authorized' || status.microphone !== 'authorized') {
+    setVoiceUI('working', 'Waiting for permission…');
+    const granted = await window.api.dictateRequest();
+    if (granted.speech !== 'authorized' || granted.microphone !== 'authorized') {
+      setVoiceUI('working', 'Microphone or speech access is off — System Settings › Privacy');
+      setTimeout(() => setVoiceUI('idle'), 4000);
+      renderDictateStatus(granted);
+      return;
+    }
+    renderDictateStatus(granted);
+  }
+
+  voiceTranscript = '';
+  setVoiceUI('listening', 'Listening…');
+  const started = await window.api.dictateStart();
+  if (!started.ok) {
+    setVoiceUI('working', started.error || 'Could not start listening');
+    setTimeout(() => setVoiceUI('idle'), 4000);
+  }
+}
+
+/// Stops listening, then lets Jev name the label and priority. Whatever Jev
+/// says, the words themselves are never lost — a failed call just means an
+/// unlabelled task.
+async function finishVoice() {
+  setVoiceUI('working', voiceTranscript || 'Finishing…');
+  const { transcript } = await window.api.dictateStop();
+  const spoken = (transcript || voiceTranscript || '').trim();
+
+  if (!spoken) {
+    setVoiceUI('working', "Didn't catch that");
+    setTimeout(() => setVoiceUI('idle'), 2500);
+    return;
+  }
+
+  setVoiceUI('working', 'Sorting it out…');
+  const verdict = await window.api.classifyVoice(spoken);
+
+  // Dates come from the same quick-add grammar the typed box uses; Jev only
+  // decides label, priority and whether this was a task at all.
+  const parsed = parseQuickAdd(spoken);
+  const text = parsed.text || spoken;
+
+  if (verdict.ok && verdict.kind === 'note') {
+    if (!Array.isArray(state.notes)) state.notes = [];
+    state.notes.push({
+      id: uid(),
+      label: verdict.label || parsed.label,
+      title: text.slice(0, 120),
+      body: '',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+    setVoiceUI('working', 'Saved as a note');
+  } else {
+    state.tasks.unshift({
+      id: uid(),
+      text,
+      label: (verdict.ok && verdict.label) || parsed.label,
+      done: false,
+      createdAt: Date.now(),
+      doneAt: null,
+      notes: '',
+      priority: (verdict.ok && verdict.priority) || parsed.priority,
+      due: parsed.due,
+      startAt: parsed.startAt,
+      repeat: parsed.repeat,
+      reminded: false,
+      dueReminded: false,
+      focusedMs: 0,
+    });
+    setVoiceUI('working', verdict.ok ? 'Added' : 'Added — ' + (verdict.error || 'not classified'));
+  }
+
+  save();
+  render();
+  setTimeout(() => setVoiceUI('idle'), verdict.ok ? 1400 : 3500);
+}
+
+async function cancelVoice() {
+  if (voiceState === 'listening') await window.api.dictateStop();
+  voiceTranscript = '';
+  setVoiceUI('idle');
+}
+
+function renderDictateStatus(status) {
+  if (!els.dictateStatus || !status) return;
+  const ok = status.speech === 'authorized' && status.microphone === 'authorized';
+  els.dictateStatus.textContent = ok
+    ? 'Ready'
+    : status.speech === 'denied' || status.microphone === 'denied'
+      ? 'Off — System Settings › Privacy'
+      : 'Not set up yet';
+  els.dictateStatus.className = 'setting-note ' + (ok ? 'ok' : 'bad');
+}
+
 function shiftDateStr(str, repeat) {
   const d = new Date(str + 'T00:00:00');
   if (isNaN(d)) return str;
@@ -2194,6 +2314,20 @@ async function init() {
     } else if (img) {
       img.remove();
     }
+  });
+
+  els.micBtn.addEventListener('click', toggleVoice);
+  els.voiceCancel.addEventListener('click', cancelVoice);
+  window.api.onDictatePartial((text) => {
+    voiceTranscript = text;
+    if (voiceState === 'listening') els.voiceText.textContent = text || 'Listening…';
+  });
+  window.api.dictateStatus().then(renderDictateStatus);
+
+  els.jevKey.value = (state.settings && state.settings.jevKey) || '';
+  els.jevKey.addEventListener('change', () => {
+    state.settings.jevKey = els.jevKey.value.trim();
+    save();
   });
 
   els.addBtn.addEventListener('click', addTask);
