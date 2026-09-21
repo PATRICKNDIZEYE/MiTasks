@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('api', {
   onCalendarState: (cb) => ipcRenderer.on('calendar-state', (_e, snap) => cb(snap)),
 
   // Lock-in (caffeinate)
+  syncQr: (url) => ipcRenderer.invoke('sync:qr', url),
   lockinStatus: () => ipcRenderer.invoke('lockin:status'),
   lockinStart: (minutes, reason) => ipcRenderer.invoke('lockin:start', minutes, reason),
   lockinStop: () => ipcRenderer.invoke('lockin:stop'),

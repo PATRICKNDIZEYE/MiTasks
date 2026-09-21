@@ -2182,6 +2182,18 @@ async function init() {
     };
     bind(document.getElementById('sync-url-ts'), info.public || info.tailscale);
     bind(document.getElementById('sync-url-lan'), info.lan);
+
+    // Prefer the Tailscale URL: it keeps working when the Wi-Fi address changes.
+    const pairUrl = info.public || info.tailscale || info.lan;
+    const img = document.getElementById('sync-qr');
+    if (pairUrl && img) {
+      window.api.syncQr(pairUrl).then((data) => {
+        if (data) img.src = data;
+        else img.remove();
+      });
+    } else if (img) {
+      img.remove();
+    }
   });
 
   els.addBtn.addEventListener('click', addTask);

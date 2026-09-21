@@ -1944,3 +1944,21 @@ body.style-dial #bubble-badge { display: none; }
   opacity: 0.4;
   cursor: default;
 }
+
+/* Pairing code for the iPhone app */
+.pair-block {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+}
+.pair-block img {
+  width: 96px;
+  height: 96px;
+  flex: none;
+  border-radius: 8px;
+}
+.pair-block .setting-note { margin: 0; line-height: 1.5; }

@@ -2,6 +2,10 @@ const { app, BrowserWindow, ipcMain, screen, globalShortcut, Notification, Tray,
 const { execFile } = require('child_process');
 const crypto = require('crypto');
 const { startSyncServer, spawnNextOccurrence } = require('./server');
+// The pairing QR is a convenience, never a reason for the widget to fail to
+// start — a missing or broken module just means the settings panel hides it.
+let QRCode = null;
+try { QRCode = require('qrcode'); } catch { /* pairing falls back to the copyable URL */ }
 const calendar = require('./calendar');
 const lockin = require('./lockin');
 const path = require('path');
@@ -607,6 +611,13 @@ ipcMain.handle('calendar:update', (_e, id, body) => calendar.updateEvent(id, bod
 ipcMain.handle('calendar:delete', (_e, id) => calendar.deleteEvent(id));
 
 /* Lock-in */
+ipcMain.handle('sync:qr', async (_e, url) => {
+  if (!url || !QRCode) return null;
+  // Dark-on-light with a quiet zone — phone cameras need the contrast.
+  return QRCode.toDataURL(url, { width: 360, margin: 2, errorCorrectionLevel: 'M',
+    color: { dark: '#141210', light: '#f0eadd' } }).catch(() => null);
+});
+
 ipcMain.handle('lockin:status', () => lockin.status());
 ipcMain.handle('lockin:start', (_e, minutes, reason) => lockin.start(minutes, reason));
 ipcMain.handle('lockin:stop', () => lockin.stop());
