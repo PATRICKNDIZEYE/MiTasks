@@ -8,40 +8,30 @@
 </head>
 <body class="collapsed style-pet">
 
-  <!-- Collapsed bubble: pet (or count dial) inside a progress arc -->
+  <!-- Collapsed bubble: the pet (or a count dial) inside a ring. The ring is
+       today's progress, or the time left while locked in or focusing. -->
   <button id="bubble" class="pet-alert" aria-label="Open tasks">
     <svg id="bubble-arc" viewBox="0 0 62 62" width="62" height="62">
       <circle class="arc-track" cx="31" cy="31" r="28" />
       <circle class="arc-fill" id="arc-fill" cx="31" cy="31" r="28" />
     </svg>
 
-    <!-- Pet cat -->
+    <!-- The cat, drawn in Crew's line: one outline, round caps, the amber dot for a nose. -->
     <svg id="pet" viewBox="0 0 62 62" width="62" height="62">
-      <path class="pet-fur" d="M19 25 L21 10 L31 17 Z" />
-      <path class="pet-fur" d="M43 25 L41 10 L31 17 Z" />
-      <path class="pet-inner-ear" d="M21.8 20.5 L22.8 13.8 L27.4 16.8 Z" />
-      <path class="pet-inner-ear" d="M40.2 20.5 L39.2 13.8 L34.6 16.8 Z" />
-      <circle class="pet-fur" cx="31" cy="34" r="15.5" />
+      <path class="pet-head" d="M18 32.5 L19.2 16.5 L27.6 22.6 Q31 21.4 34.4 22.6 L42.8 16.5 L44 32.5 Q44 46 31 46 Q18 46 18 32.5 Z" />
       <g class="pet-eyes eyes-open">
-        <circle cx="25" cy="32" r="2.3" />
-        <circle cx="37" cy="32" r="2.3" />
+        <circle cx="26" cy="33" r="2.1" />
+        <circle cx="36" cy="33" r="2.1" />
       </g>
       <g class="pet-eyes eyes-happy">
-        <path d="M22.5 32.5 Q25 29.5 27.5 32.5" />
-        <path d="M34.5 32.5 Q37 29.5 39.5 32.5" />
+        <path d="M23.6 34 Q26 31 28.4 34" />
+        <path d="M33.6 34 Q36 31 38.4 34" />
       </g>
       <g class="pet-eyes eyes-focus">
-        <path d="M22.5 31.5 H27.5" />
-        <path d="M34.5 31.5 H39.5" />
+        <path d="M23.6 33 H28.4" />
+        <path d="M33.6 33 H38.4" />
       </g>
-      <path class="pet-nose" d="M29.6 37 h2.8 l-1.4 1.9 z" />
-      <path class="pet-mouth" d="M31 39.2 Q29.5 41.2 27.5 40.4 M31 39.2 Q32.5 41.2 34.5 40.4" />
-      <g class="pet-whiskers">
-        <path d="M13.5 34.5 L20 34" />
-        <path d="M13.5 38.5 L20 37.2" />
-        <path d="M48.5 34.5 L42 34" />
-        <path d="M48.5 38.5 L42 37.2" />
-      </g>
+      <circle class="pet-nose" cx="31" cy="38.6" r="2.2" />
     </svg>
 
     <span id="bubble-count">0</span>
@@ -51,6 +41,45 @@
     </svg>
     <span id="bubble-badge" hidden>0</span>
   </button>
+
+  <!-- Time left, under the bubble, while locked in or focusing. -->
+  <span id="bubble-tag" hidden></span>
+
+  <!-- Hover the bubble to peek without opening, like Crew's pet. -->
+  <div id="peek" hidden>
+    <div id="peek-timer" hidden>
+      <div class="peek__head">
+        <span class="peek__dot"></span>
+        <span id="peek-title">Locked in</span>
+        <span id="peek-ends"></span>
+      </div>
+      <div id="peek-clock">0:00</div>
+      <div id="peek-sub"></div>
+      <div class="peek__bar"><i id="peek-bar"></i></div>
+      <div class="peek__acts">
+        <button id="peek-plus" class="row-action">+15 min</button>
+        <button id="peek-stop" class="row-action peek__stop">Stop</button>
+      </div>
+    </div>
+    <div id="peek-idle" hidden>
+      <div class="peek__head">
+        <span class="peek__dot peek__dot--off"></span>
+        <span>Not locked in</span>
+      </div>
+      <div class="peek__acts">
+        <button id="peek-lock" class="row-action">Lock in</button>
+      </div>
+    </div>
+    <div id="peek-needs" hidden>
+      <div class="peek__sec">
+        <span>Needs you</span>
+        <span class="peek__count" id="peek-needs-count"></span>
+        <span class="peek__hint">click the cat to open</span>
+      </div>
+      <ul id="peek-list"></ul>
+    </div>
+    <div id="peek-meeting" hidden></div>
+  </div>
 
   <!-- Expanded panel: laid out like a Crew mission — top bar, header, composer, tabs. -->
   <div id="panel">

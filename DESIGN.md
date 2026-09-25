@@ -83,3 +83,17 @@ the composer and sheets. Pills are fully round.
 - **Segmented control.** A `surface-3` track; the selected segment is
   `chip-bg`.
 - **Switch.** Track `line-strong`, `status-running` when on.
+- **Bubble.** The collapsed widget. A line cat in Crew's hand: an ivory
+  outline with round caps and the amber brand dot for a nose.
+  - **Face:** open eyes that blink every few seconds when tasks are pending;
+    flat lines while a clock runs; smiling when everything is done. The nose
+    pulses when something is overdue.
+  - **Ring:** today's progress, or the time left (in `status-running`) while
+    locked in or focusing. It turns amber for the last 10 minutes.
+  - **Time tag:** a Mono pill under the bubble while a clock runs. It shows
+    minutes ("38m"), then "m:ss" for the last 10 minutes.
+  - **Peek:** hovering for ~0.3s opens a card above the bubble, like Crew's
+    pet. It shows the big Mono countdown, time in, the end time, +15 and
+    Stop (or Lock in when idle), the top 3 of Needs you, and the next
+    meeting. Moving away folds it back.
+  - **Menu bar:** while locked in, the title shows `◉ 38m`.
