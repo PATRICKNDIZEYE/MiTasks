@@ -17,6 +17,8 @@ const MARGIN = 20;
 const SIZES = {
   collapsed: { width: 96, height: 96 },
   expanded: { width: 400, height: 648 },
+  // The hover peek: the bubble plus a card above it. Height follows the card.
+  peek: { width: 292, height: 96 },
 };
 const SOUNDS_DIR = '/System/Library/Sounds';
 const REMINDER_WINDOW_MS = 60 * 60 * 1000; // don't fire for things more than an hour stale
@@ -27,6 +29,9 @@ const PRIORITY_RANK = { high: 0, med: 1 };
 let win = null;
 let mode = 'collapsed';
 let anchor = null; // bottom-left corner of the widget, in screen coords
+// How far the window was pushed off the anchor by the screen edge. The bubble
+// is drawn this much further in so it stays put while the peek card is open.
+let offset = { dx: 0, dy: 0 };
 let dragState = null;
 let anchorSaveTimer = null;
 let appState = null; // last known task state, used by the reminder loop
@@ -85,15 +90,18 @@ function persistAnchor() {
 
 function updateAnchorFromWindow() {
   const b = win.getBounds();
-  anchor = { x: b.x, y: b.y + b.height };
+  anchor = { x: b.x + offset.dx, y: b.y + b.height - offset.dy };
   persistAnchor();
 }
 
 function setMode(m) {
   if (!win) return;
   mode = m;
-  win.setBounds(boundsFor(m));
-  win.webContents.send('mode-changed', m);
+  const b = boundsFor(m);
+  // Set before moving: setBounds can fire 'moved', which reads the offset.
+  offset = m === 'peek' ? { dx: anchor.x - b.x, dy: b.y + b.height - anchor.y } : { dx: 0, dy: 0 };
+  win.setBounds(b);
+  win.webContents.send('mode-changed', m, offset);
   if (m === 'expanded') {
     win.show();
     win.focus();
@@ -418,8 +426,18 @@ function updateTray() {
     tray.on('right-click', pop);
   }
   const pending = (appState?.tasks || []).filter((t) => !t.done).length;
-  const awake = lockin.status().active ? '◉ ' : '';
+  // While locked in, the menu bar carries the time left, so you can check it
+  // without touching the widget.
+  const lock = lockin.status();
+  const awake = lock.active ? `◉ ${shortLeft(lock.remaining)}  ` : '';
   tray.setTitle(awake + (pending ? `✓ ${pending}` : '✓'), { fontType: 'monospacedDigit' });
+}
+
+/// "38m", "1h 05m" — minutes are plenty for a glance at the menu bar.
+function shortLeft(ms) {
+  const mins = Math.max(1, Math.ceil(ms / 60000));
+  if (mins < 60) return `${mins}m`;
+  return `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, '0')}m`;
 }
 
 /* ---------- Window ---------- */
@@ -547,6 +565,8 @@ app.whenReady().then(() => {
   powerMonitor.on('unlock-screen', reassertTransparency);
 
   updateTray();
+  // Keeps the lock-in countdown in the menu bar moving.
+  setInterval(() => { if (lockin.status().active) updateTray(); }, 15 * 1000);
 
   setInterval(checkReminders, 20 * 1000);
   // First check only once the renderer can receive the reminder-fired event.
@@ -594,6 +614,15 @@ ipcMain.on('state:save', (_e, state) => {
   if (syncServer) syncServer.broadcast();
 });
 ipcMain.on('mode:set', (_e, m) => setMode(m));
+// Peek grows the window to fit the card; it never steals focus from your work.
+ipcMain.on('peek:open', (_e, height) => {
+  if (!win || mode === 'expanded' || dragState) return;
+  SIZES.peek.height = Math.round(Math.min(Math.max(Number(height) || 96, 96), 640));
+  setMode('peek');
+});
+ipcMain.on('peek:close', () => {
+  if (mode === 'peek') setMode('collapsed');
+});
 ipcMain.handle('sounds:list', () => listSounds());
 ipcMain.on('sounds:preview', (_e, name) => playSound(String(name).replace(/[^\w -]/g, '')));
 ipcMain.handle('sync:info', () => ({

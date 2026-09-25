@@ -102,8 +102,12 @@
   --t-2xl: 28px;
 
   --ease-spring: cubic-bezier(0.34, 1.35, 0.5, 1);
-  color-scheme: dark;
 }
+
+/* Dark form controls inside the panel and card only. On the root it would
+   let Chromium paint an opaque canvas behind the transparent bubble window. */
+#panel,
+#peek { color-scheme: dark; }
 
 * {
   margin: 0;
@@ -324,7 +328,8 @@ ul { list-style: none; }
 #bubble-check { color: var(--green); }
 
 body.expanded #bubble { display: none; }
-body.collapsed #panel { display: none; }
+body.collapsed #panel,
+body.peek #panel { display: none; }
 
 /* ---------- Panel ---------- */
 
@@ -1847,28 +1852,26 @@ input::-webkit-calendar-picker-indicator { opacity: 0.55; }
   100% { transform: translate(var(--cx), var(--cy)) rotate(var(--cr)) scale(0.4); opacity: 0; }
 }
 
-/* ---------- Pet ---------- */
+/* ---------- Pet: a line cat in Crew's hand ---------- */
 
 #pet { position: absolute; inset: 0; }
 
-.pet-fur {
-  fill: var(--surface-3);
-  stroke: var(--line-strong);
-  stroke-width: 1.2;
+.pet-head {
+  fill: none;
+  stroke: #f3f1ea;
+  stroke-width: 2.6;
   stroke-linejoin: round;
+  stroke-linecap: round;
 }
 
-.pet-inner-ear { fill: color-mix(in srgb, var(--brand-dot) 55%, transparent); }
-
 .pet-eyes { display: none; }
-
-.eyes-open circle { fill: var(--ink); }
+.eyes-open circle { fill: #f3f1ea; }
 
 .eyes-happy path,
 .eyes-focus path {
   fill: none;
-  stroke: var(--ink);
-  stroke-width: 1.8;
+  stroke: #f3f1ea;
+  stroke-width: 2.4;
   stroke-linecap: round;
 }
 
@@ -1876,20 +1879,241 @@ input::-webkit-calendar-picker-indicator { opacity: 0.55; }
 #bubble.pet-happy .eyes-happy { display: block; }
 #bubble.pet-focus .eyes-focus { display: block; }
 
-.pet-nose { fill: var(--brand-dot); }
-
-.pet-mouth {
-  fill: none;
-  stroke: var(--ink-2);
-  stroke-width: 1.2;
-  stroke-linecap: round;
+/* A blink every few seconds, so it reads as alive rather than as an icon. */
+.eyes-open {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pet-blink 5.2s ease-in-out infinite;
 }
 
-.pet-whiskers path {
-  stroke: var(--faint);
-  stroke-width: 1;
-  stroke-linecap: round;
+@keyframes pet-blink {
+  0%, 94%, 100% { transform: scaleY(1); }
+  96.5% { transform: scaleY(0.1); }
 }
+
+/* The nose is Crew's amber dot; it pulses when something is late. */
+.pet-nose {
+  fill: var(--brand-dot);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+#bubble.pet-needs .pet-nose {
+  filter: drop-shadow(0 0 3px var(--brand-dot));
+  animation: pet-nose-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes pet-nose-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.35); }
+}
+
+/* While a clock runs the ring is the time left, in the running colour. */
+#bubble.timing .arc-fill { stroke: var(--status-running); }
+#bubble.timing-soon .arc-fill { stroke: var(--amber); }
+
+@media (prefers-reduced-motion: reduce) {
+  .eyes-open,
+  #bubble.pet-needs .pet-nose { animation: none; }
+}
+
+/* ---------- Bubble placement ---------- */
+
+/* --bx / --by: how far the screen edge pushed the window; keeps the bubble put. */
+#bubble {
+  left: calc(17px + var(--bx, 0px));
+  bottom: calc(17px + var(--by, 0px));
+}
+
+#bubble-tag {
+  position: fixed;
+  left: calc(48px + var(--bx, 0px));
+  bottom: calc(6px + var(--by, 0px));
+  transform: translateX(-50%);
+  height: 18px;
+  padding: 0 7px;
+  border: 1px solid color-mix(in srgb, var(--status-running) 55%, transparent);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--status-running);
+  font: 500 var(--t-xs) / 16px var(--mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: var(--shadow-sm);
+}
+
+#bubble-tag.soon {
+  border-color: color-mix(in srgb, var(--amber) 55%, transparent);
+  color: var(--amber);
+}
+
+body.expanded #bubble-tag { display: none; }
+
+/* ---------- Peek card ---------- */
+
+body:not(.peek) #peek { visibility: hidden; }
+
+#peek {
+  position: fixed;
+  left: 12px;
+  bottom: calc(92px + var(--by, 0px));
+  width: 268px;
+  padding: 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  animation: peek-in 140ms ease-out;
+  transform-origin: bottom left;
+}
+
+@keyframes peek-in {
+  from { opacity: 0; transform: translateY(4px) scale(0.98); }
+}
+
+#peek > div:not([hidden]) ~ div:not([hidden]) {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.peek__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--t-md);
+  font-weight: 600;
+}
+
+.peek__dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--status-running);
+}
+
+.peek__dot--off { background: var(--faint); }
+
+#peek-ends {
+  margin-left: auto;
+  font-size: var(--t-sm);
+  font-weight: 400;
+  color: var(--muted);
+}
+
+#peek-clock {
+  margin-top: 6px;
+  font: 500 var(--t-2xl) / 1.1 var(--mono);
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--status-running);
+}
+
+#peek-timer.soon #peek-clock { color: var(--amber); }
+
+#peek-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--t-sm);
+  color: var(--muted);
+}
+
+.peek__bar {
+  height: 4px;
+  margin: 8px 0 12px;
+  border-radius: 2px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.peek__bar i {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--status-running);
+  transition: width 1s linear;
+}
+
+#peek-timer.soon .peek__bar i { background: var(--amber); }
+
+.peek__acts {
+  display: flex;
+  gap: 6px;
+}
+
+#peek-idle .peek__acts { margin-top: 8px; }
+
+.peek__stop { color: var(--red); }
+.peek__stop:hover { background: var(--red-bg); }
+
+.peek__sec {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 4px;
+  font-size: var(--t-md);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.peek__count { color: var(--amber); }
+
+.peek__hint {
+  margin-left: auto;
+  font-size: var(--t-sm);
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.peek__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: var(--t-md);
+}
+
+.peek__text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.peek__word {
+  flex: none;
+  font-size: var(--t-sm);
+  color: var(--muted);
+}
+
+.peek__word.tone-red { color: var(--red); }
+.peek__word.tone-amber { color: var(--amber); }
+
+#peek-meeting {
+  display: flex;
+  gap: 8px;
+  font-size: var(--t-sm);
+  color: var(--muted);
+}
+
+#peek-meeting b {
+  flex: none;
+  font: 400 var(--t-sm) var(--mono);
+  color: var(--ink-2);
+}
+
+#peek-meeting span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#peek-meeting.live,
+#peek-meeting.live b { color: var(--amber); }
 
 #bubble-badge {
   position: absolute;

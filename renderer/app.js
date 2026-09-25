@@ -70,6 +70,22 @@ const els = {
   bubbleCheck: $('bubble-check'),
   bubbleBadge: $('bubble-badge'),
   arcFill: $('arc-fill'),
+  bubbleTag: $('bubble-tag'),
+  peek: $('peek'),
+  peekTimer: $('peek-timer'),
+  peekTitle: $('peek-title'),
+  peekEnds: $('peek-ends'),
+  peekClock: $('peek-clock'),
+  peekSub: $('peek-sub'),
+  peekBar: $('peek-bar'),
+  peekPlus: $('peek-plus'),
+  peekStop: $('peek-stop'),
+  peekIdle: $('peek-idle'),
+  peekLock: $('peek-lock'),
+  peekNeeds: $('peek-needs'),
+  peekNeedsCount: $('peek-needs-count'),
+  peekList: $('peek-list'),
+  peekMeeting: $('peek-meeting'),
   panel: $('panel'),
   dateLine: $('date-line'),
   progressText: $('progress-text'),
@@ -888,39 +904,7 @@ function showNewLabelInput() {
 /* ---------- Bubble & progress ---------- */
 
 function renderProgress() {
-  const total = state.tasks.length;
-  const doneCount = state.tasks.filter((t) => t.done).length;
-  const pending = total - doneCount;
-  const ratio = total ? doneCount / total : 0;
-
-  const style = state.settings.bubbleStyle === 'dial' ? 'dial' : 'pet';
-  document.body.classList.toggle('style-pet', style === 'pet');
-  document.body.classList.toggle('style-dial', style === 'dial');
-
-  const focus = activeFocus();
-
-  if (focus) {
-    const { elapsed, totalMs, remaining } = focus;
-    els.arcFill.style.strokeDashoffset = ARC_CIRCUMFERENCE * (1 - elapsed / totalMs);
-    const mins = Math.max(1, Math.ceil(remaining / 60000));
-    els.bubbleBadge.hidden = false;
-    els.bubbleBadge.textContent = `${mins}′`;
-    els.bubbleCount.hidden = true;
-    els.bubbleCheck.hidden = true;
-    if (style === 'dial') {
-      els.bubbleCount.hidden = false;
-      els.bubbleCount.textContent = `${mins}′`;
-    }
-    setPetFace('focus');
-  } else {
-    els.arcFill.style.strokeDashoffset = ARC_CIRCUMFERENCE * (1 - ratio);
-    els.bubbleCount.hidden = pending === 0;
-    els.bubbleCheck.hidden = pending !== 0;
-    els.bubbleCount.textContent = pending > 99 ? '99' : String(pending);
-    els.bubbleBadge.hidden = pending === 0;
-    els.bubbleBadge.textContent = pending > 99 ? '99' : String(pending);
-    setPetFace(pending === 0 ? 'happy' : 'alert');
-  }
+  renderBubble();
 
   // Panel progress follows the active label filter; the bubble stays global.
   const scoped = visibleTasks();
@@ -932,8 +916,188 @@ function renderProgress() {
 }
 
 function setPetFace(face) {
+  // Swapping the class restarts the blink, so leave it alone if nothing changed.
+  if (els.bubble.classList.contains(`pet-${face}`)) return;
   els.bubble.classList.remove('pet-alert', 'pet-happy', 'pet-focus');
   els.bubble.classList.add(`pet-${face}`);
+}
+
+/// The clock the bubble is showing, if any. A focus session wins over
+/// lock-in: it's the shorter, more specific clock.
+function activeTimer() {
+  const focus = activeFocus();
+  if (focus) {
+    return {
+      kind: 'focus',
+      startedAt: state.focus.startedAt,
+      endAt: state.focus.endAt,
+      total: focus.totalMs,
+      remaining: focus.remaining,
+      task: focus.task,
+    };
+  }
+  if (lockinState.active && lockinState.endAt > Date.now()) {
+    const startedAt = lockinState.startedAt || lockinState.endAt - (lockinState.minutes || 60) * 60000;
+    return {
+      kind: 'lockin',
+      startedAt,
+      endAt: lockinState.endAt,
+      total: Math.max(1, lockinState.endAt - startedAt),
+      remaining: lockinState.endAt - Date.now(),
+    };
+  }
+  return null;
+}
+
+/// The tag under the bubble: minutes while there's time, seconds at the end.
+function tagText(ms) {
+  const secs = Math.max(0, Math.ceil(ms / 1000));
+  if (secs < 600) return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+  const mins = Math.ceil(secs / 60);
+  if (mins < 60) return `${mins}m`;
+  return `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, '0')}m`;
+}
+
+/// The collapsed bubble: ring, tag, badge and the cat's face. Cheap enough to
+/// run every second while a clock is going.
+function renderBubble() {
+  const total = state.tasks.length;
+  const doneCount = state.tasks.filter((t) => t.done).length;
+  const pending = total - doneCount;
+  const style = state.settings.bubbleStyle === 'dial' ? 'dial' : 'pet';
+  document.body.classList.toggle('style-pet', style === 'pet');
+  document.body.classList.toggle('style-dial', style === 'dial');
+
+  const timer = activeTimer();
+  const soon = !!timer && timer.remaining < 10 * 60000;
+  els.bubble.classList.toggle('timing', !!timer);
+  els.bubble.classList.toggle('timing-soon', soon);
+  els.bubbleTag.hidden = !timer;
+  els.bubbleTag.classList.toggle('soon', soon);
+
+  if (timer) {
+    // The ring drains with the time left.
+    els.arcFill.style.strokeDashoffset = ARC_CIRCUMFERENCE * (1 - timer.remaining / timer.total);
+    els.bubbleTag.textContent = tagText(timer.remaining);
+  } else {
+    els.arcFill.style.strokeDashoffset = ARC_CIRCUMFERENCE * (1 - (total ? doneCount / total : 0));
+  }
+
+  els.bubbleCount.hidden = pending === 0;
+  els.bubbleCheck.hidden = pending !== 0;
+  els.bubbleCount.textContent = pending > 99 ? '99' : String(pending);
+  els.bubbleBadge.hidden = pending === 0;
+  els.bubbleBadge.textContent = pending > 99 ? '99' : String(pending);
+
+  // Something late: the amber nose pulses, like Crew's dot when it needs you.
+  const today = startOfToday();
+  els.bubble.classList.toggle(
+    'pet-needs',
+    state.tasks.some((t) => !t.done && t.due && dueValue(t) < today)
+  );
+  setPetFace(timer ? 'focus' : pending === 0 ? 'happy' : 'alert');
+
+  if (peeking) renderPeekClock(timer);
+}
+
+/* ---------- Peek: hover the bubble to see where you are ---------- */
+
+let peeking = false;
+let peekOpenTimer = null;
+let peekCloseTimer = null;
+
+function renderPeekClock(timer) {
+  if (!timer) return;
+  const elapsed = Math.max(0, Date.now() - timer.startedAt);
+  els.peekClock.textContent = lockinClock(timer.remaining);
+  els.peekBar.style.width = `${Math.max(0, Math.min(1, timer.remaining / timer.total)) * 100}%`;
+  els.peekSub.textContent = timer.kind === 'focus'
+    ? `${formatMinutes(elapsed)} in · ${timer.task.text}`
+    : `${formatMinutes(elapsed)} in · keeping this Mac awake`;
+  els.peekTimer.classList.toggle('soon', timer.remaining < 10 * 60000);
+}
+
+function renderPeek() {
+  const timer = activeTimer();
+  els.peekTimer.hidden = !timer;
+  els.peekIdle.hidden = !!timer;
+  if (timer) {
+    els.peekTitle.textContent = timer.kind === 'focus'
+      ? 'Focusing'
+      : lockinState.reason === 'focus' ? 'Awake for focus' : 'Locked in';
+    els.peekEnds.textContent = 'ends ' + new Date(timer.endAt)
+      .toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    renderPeekClock(timer);
+  } else {
+    const mins = state.settings.lockInMinutes || 60;
+    const span = mins % 60 ? formatMinutes(mins * 60000) : `${mins / 60}h`;
+    els.peekLock.textContent = `Lock in for ${span}`;
+  }
+
+  const focusId = state.focus ? state.focus.taskId : null;
+  const needs = state.tasks
+    .filter((t) => !t.done && t.id !== focusId && needsYou(t))
+    .sort((a, b) => dueValue(a) - dueValue(b) ||
+      (PRIORITY_RANK[a.priority] ?? 2) - (PRIORITY_RANK[b.priority] ?? 2));
+  els.peekNeeds.hidden = needs.length === 0;
+  els.peekNeedsCount.textContent = String(needs.length);
+  els.peekList.textContent = '';
+  for (const task of needs.slice(0, 3)) {
+    const li = document.createElement('li');
+    li.className = 'peek__row';
+    const dot = document.createElement('span');
+    dot.className = 'dot';
+    const label = labelFor(task.label);
+    if (label) dot.style.background = label.color;
+    const text = document.createElement('span');
+    text.className = 'peek__text';
+    text.textContent = task.text;
+    const status = rowStatus(task);
+    const word = document.createElement('span');
+    word.className = 'peek__word' + (status.tone ? ` tone-${status.tone}` : '');
+    word.textContent = status.text.split(' · ')[0];
+    li.append(dot, text, word);
+    els.peekList.appendChild(li);
+  }
+
+  // The next meeting, if the calendar is connected.
+  const now = Date.now();
+  const next = calendarSnap.status === 'fullAccess'
+    ? todaysEvents().find((e) => !e.allDay && eventEnd(e) > now)
+    : null;
+  els.peekMeeting.hidden = !next;
+  if (next) {
+    const live = eventStart(next) <= now;
+    const time = document.createElement('b');
+    time.textContent = eventTimeLabel(next);
+    const what = document.createElement('span');
+    what.textContent = live
+      ? `${next.title} · now`
+      : `${next.title} · in ${formatMinutes(eventStart(next) - now)}`;
+    els.peekMeeting.classList.toggle('live', live);
+    els.peekMeeting.replaceChildren(time, what);
+  }
+}
+
+function openPeek() {
+  if (!document.body.classList.contains('collapsed')) return;
+  renderPeek();
+  // Measure off-screen, then ask main for a window that fits the card.
+  els.peek.hidden = false;
+  window.api.peekOpen(els.peek.offsetHeight + 104);
+}
+
+function schedulePeekClose() {
+  clearTimeout(peekOpenTimer);
+  clearTimeout(peekCloseTimer);
+  peekCloseTimer = setTimeout(() => {
+    if (peeking) window.api.peekClose();
+    else els.peek.hidden = true;
+  }, 400);
+}
+
+function cancelPeekClose() {
+  clearTimeout(peekCloseTimer);
 }
 
 /* ---------- Focus sessions ---------- */
@@ -1021,14 +1185,6 @@ function focusTick() {
     return;
   }
   renderFocusStrip();
-  // Keep the bubble countdown fresh without a full re-render.
-  if (focus) {
-    const mins = Math.max(1, Math.ceil(focus.remaining / 60000));
-    els.bubbleBadge.textContent = `${mins}′`;
-    if (state.settings.bubbleStyle === 'dial') els.bubbleCount.textContent = `${mins}′`;
-    els.arcFill.style.strokeDashoffset =
-      ARC_CIRCUMFERENCE * (1 - focus.elapsed / focus.totalMs);
-  }
 }
 
 /* ---------- Agenda ---------- */
@@ -1256,17 +1412,22 @@ function renderLockin() {
     ? 'Lock in'
     : lockinState.reason === 'focus' ? 'Awake' : 'Locked in';
   els.lockinTime.textContent = active ? lockinClock(lockinState.endAt - Date.now()) : '';
+  renderBubble();
+  if (peeking) renderPeek();
 }
 
 function lockinTick() {
-  if (!lockinState.active) return;
-  if (lockinState.endAt - Date.now() <= 0) {
-    // main will confirm, but drop the strip immediately rather than sit at 0:00.
-    lockinState = { active: false };
-    renderLockin();
-    return;
+  if (lockinState.active) {
+    if (lockinState.endAt - Date.now() <= 0) {
+      // main will confirm, but drop the pill immediately rather than sit at 0:00.
+      lockinState = { active: false };
+      renderLockin();
+    } else {
+      els.lockinTime.textContent = lockinClock(lockinState.endAt - Date.now());
+    }
   }
-  els.lockinTime.textContent = lockinClock(lockinState.endAt - Date.now());
+  // The bubble's ring and tag move every second while any clock runs.
+  if (lockinState.active || state.focus || peeking) renderBubble();
 }
 
 async function startLockin(minutes, reason = 'manual') {
@@ -2261,9 +2422,16 @@ function celebrate() {
 
 /* ---------- Mode / window ---------- */
 
-function setBodyMode(mode) {
+function setBodyMode(mode, offset) {
   document.body.classList.toggle('expanded', mode === 'expanded');
   document.body.classList.toggle('collapsed', mode === 'collapsed');
+  document.body.classList.toggle('peek', mode === 'peek');
+  peeking = mode === 'peek';
+  if (!peeking) els.peek.hidden = true;
+  // Where the screen edge pushed the window, draw the bubble back in place.
+  const off = offset || { dx: 0, dy: 0 };
+  document.body.style.setProperty('--bx', `${off.dx}px`);
+  document.body.style.setProperty('--by', `${off.dy}px`);
   // Don't let a half-made choice greet you next time the panel opens.
   if (mode === 'collapsed') els.lockinMenu.hidden = true;
   if (mode === 'expanded') {
@@ -2351,6 +2519,7 @@ async function init() {
   // Bubble: drag to move the widget, plain click to open.
   els.bubble.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
+    clearTimeout(peekOpenTimer); // a press is a drag or a click, not a hover
     window.api.dragStart();
     const onUp = async () => {
       document.removeEventListener('mouseup', onUp);
@@ -2359,6 +2528,39 @@ async function init() {
     };
     document.addEventListener('mouseup', onUp);
   });
+
+  // Hover the bubble a moment to peek; leave the bubble and card to fold it.
+  els.bubble.addEventListener('mouseenter', () => {
+    cancelPeekClose();
+    if (peeking) return;
+    clearTimeout(peekOpenTimer);
+    peekOpenTimer = setTimeout(openPeek, 280);
+  });
+  els.bubble.addEventListener('mouseleave', schedulePeekClose);
+  els.peek.addEventListener('mouseenter', cancelPeekClose);
+  els.peek.addEventListener('mouseleave', schedulePeekClose);
+
+  els.peekPlus.addEventListener('click', () => {
+    const timer = activeTimer();
+    if (timer && timer.kind === 'focus') {
+      state.focus.endAt += 15 * 60000;
+      save();
+      render();
+      renderPeek();
+    } else {
+      window.api.lockinExtend(15).then((s) => { lockinState = s || { active: false }; renderLockin(); });
+    }
+  });
+  els.peekStop.addEventListener('click', () => {
+    const timer = activeTimer();
+    if (timer && timer.kind === 'focus') {
+      stopFocus(false);
+      renderPeek();
+    } else {
+      window.api.lockinStop().then((s) => { lockinState = s || { active: false }; renderLockin(); });
+    }
+  });
+  els.peekLock.addEventListener('click', () => startLockin(state.settings.lockInMinutes || 60));
 
   els.collapseBtn.addEventListener('click', () => window.api.setMode('collapsed'));
   window.api.onModeChanged(setBodyMode);
