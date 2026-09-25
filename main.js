@@ -636,7 +636,7 @@ ipcMain.handle('sync:qr', async (_e, url) => {
   if (!url || !QRCode) return null;
   // Dark-on-light with a quiet zone — phone cameras need the contrast.
   return QRCode.toDataURL(url, { width: 360, margin: 2, errorCorrectionLevel: 'M',
-    color: { dark: '#141210', light: '#f0eadd' } }).catch(() => null);
+    color: { dark: '#171716', light: '#ffffff' } }).catch(() => null);
 });
 
 ipcMain.handle('lockin:status', () => lockin.status());

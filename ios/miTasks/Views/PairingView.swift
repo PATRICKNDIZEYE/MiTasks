@@ -10,76 +10,68 @@ struct PairingView: View {
 
     var body: some View {
         ZStack {
-            Theme.background.ignoresSafeArea()
+            Theme.bg.ignoresSafeArea()
 
             VStack(alignment: .leading, spacing: 0) {
-                Text("miTasks").font(Theme.display(34))
+                HStack(spacing: Theme.Space.s) {
+                    Circle().fill(Theme.brandDot).frame(width: 10, height: 10)
+                    Text("miTasks").font(Theme.display())
+                }
                 Eyebrow(text: "Connect to your Mac")
-                    .padding(.top, 6)
+                    .padding(.top, Theme.Space.xs)
 
                 Text("Open the widget on your Mac and scan its pairing code, or paste the link it shows you.")
-                    .font(.system(size: 14))
+                    .font(Theme.text(Theme.Size.body))
                     .foregroundStyle(Theme.ink2)
-                    .lineSpacing(3)
-                    .padding(.top, 18)
+                    .lineSpacing(Theme.Space.s6)
+                    .padding(.top, Theme.Space.l)
 
                 Button {
                     scanning = true
                 } label: {
-                    HStack(spacing: 9) {
-                        Image(systemName: "qrcode.viewfinder")
-                        Text("Scan pairing code").fontWeight(.bold)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 15)
-                    .background(Theme.amber, in: RoundedRectangle(cornerRadius: 12))
-                    .foregroundStyle(Color(hex: 0x241D10))
+                    Label("Scan pairing code", systemImage: "qrcode.viewfinder")
                 }
-                .padding(.top, 26)
+                .buttonStyle(.crew(.primary, height: Theme.Height.large, fullWidth: true))
+                .padding(.top, Theme.Space.xxl)
 
-                HStack(spacing: 10) {
-                    Rectangle().fill(Theme.hair).frame(height: 1)
-                    Text("or").font(.system(size: 11)).foregroundStyle(Theme.ink3)
-                    Rectangle().fill(Theme.hair).frame(height: 1)
+                HStack(spacing: Theme.Space.m) {
+                    Rectangle().fill(Theme.line).frame(height: 1)
+                    Text("or").font(Theme.text(Theme.Size.xs)).foregroundStyle(Theme.faint)
+                    Rectangle().fill(Theme.line).frame(height: 1)
                 }
-                .padding(.vertical, 20)
+                .padding(.vertical, Theme.Space.xl)
 
                 TextField("http://10.0.0.5:43917/?key=…", text: $manual)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .keyboardType(.URL)
-                    .font(.system(size: 14))
-                    .padding(12)
-                    .background(Theme.ink.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.hair, lineWidth: 1))
+                    .font(Theme.mono(Theme.Size.m))
+                    .crewInput()
 
                 Button("Connect") {
                     _ = store.pair(with: manual)
                 }
-                .fontWeight(.bold)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background(Theme.ink.opacity(0.06), in: RoundedRectangle(cornerRadius: 11))
-                .foregroundStyle(Theme.ink2)
-                .padding(.top, 10)
+                .buttonStyle(.crew(.secondary, height: Theme.Height.large, fullWidth: true))
+                .padding(.top, Theme.Space.s)
                 .disabled(manual.isEmpty)
+                .opacity(manual.isEmpty ? 0.5 : 1)
 
                 if let err = store.lastError {
                     Text(err)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Theme.clay)
-                        .padding(.top, 12)
+                        .font(Theme.text(Theme.Size.s))
+                        .foregroundStyle(Theme.red)
+                        .padding(.top, Theme.Space.m)
                 }
 
                 Spacer()
 
                 Text("Your Mac and iPhone need to be on the same Wi‑Fi, and the widget has to be running — it's the server.")
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(Theme.ink3)
-                    .lineSpacing(2)
+                    .font(Theme.text(Theme.Size.s))
+                    .foregroundStyle(Theme.muted)
+                    .lineSpacing(Theme.Space.xxs)
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 40)
+            .padding(.horizontal, Theme.Space.xxl)
+            .padding(.vertical, Theme.Space.s40)
         }
         .foregroundStyle(Theme.ink)
         .sheet(isPresented: $scanning) {

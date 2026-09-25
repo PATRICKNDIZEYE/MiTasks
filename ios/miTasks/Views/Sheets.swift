@@ -19,35 +19,50 @@ struct TaskEditor: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Theme.background.ignoresSafeArea()
+                Theme.surface.ignoresSafeArea()
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 15) {
+                    VStack(alignment: .leading, spacing: Theme.Space.l) {
                         field("Task") {
                             TextField("", text: $text, axis: .vertical)
-                                .font(.system(size: 14.5))
-                                .padding(12)
-                                .background(Theme.ink.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
+                                .font(Theme.text(Theme.Size.body))
+                                .crewInput()
+                        }
+
+                        field("Label") {
+                            FlowRow(spacing: Theme.Space.xs) {
+                                OptionChip(title: "None", on: label == nil) { label = nil }
+                                ForEach(store.state.labels) { l in
+                                    OptionChip(title: l.name, dot: Color(cssHex: l.color), on: label == l.name) {
+                                        label = l.name
+                                    }
+                                }
+                            }
                         }
 
                         field("Priority") {
                             Segmented(
                                 options: [(nil, "None"), ("med", "Medium"), ("high", "High")],
-                                selection: $priority
+                                selection: $priority,
+                                tints: ["med": Theme.amber, "high": Theme.red]
                             )
                         }
 
-                        field("Label") {
-                            Segmented(
-                                options: [(nil, "None")] + store.state.labels.map { ($0.name, $0.name) },
-                                selection: $label
-                            )
+                        if !task.done {
+                            field("Focus") {
+                                let focused = store.state.focus?.taskId == task.id
+                                Button(focused ? "Stop session" : "Focus · \(store.state.focusMinutes) min") {
+                                    focused ? store.stopFocus() : store.startFocus(task)
+                                    dismiss()
+                                }
+                                .buttonStyle(.crew(focused ? .destructive : .chip, height: 26))
+                            }
                         }
 
                         field("Due date") {
                             VStack(alignment: .leading, spacing: 8) {
                                 Toggle("Has a due date", isOn: $hasDue)
-                                    .font(.system(size: 13))
-                                    .tint(Theme.amber)
+                                    .font(Theme.text(Theme.Size.body))
+                                    .tint(Theme.statusRunning)
                                 if hasDue {
                                     DatePicker("", selection: $due, displayedComponents: .date)
                                         .datePickerStyle(.compact)
@@ -59,8 +74,8 @@ struct TaskEditor: View {
                         field("Start time") {
                             VStack(alignment: .leading, spacing: 8) {
                                 Toggle("Has a start time", isOn: $hasStart)
-                                    .font(.system(size: 13))
-                                    .tint(Theme.amber)
+                                    .font(Theme.text(Theme.Size.body))
+                                    .tint(Theme.statusRunning)
                                 if hasStart {
                                     DatePicker("", selection: $start)
                                         .datePickerStyle(.compact)
@@ -72,7 +87,7 @@ struct TaskEditor: View {
                         field("Repeat") {
                             Segmented(
                                 options: [
-                                    (nil, "Never"), ("daily", "Daily"),
+                                    (nil, "Off"), ("daily", "Daily"),
                                     ("weekly", "Weekly"), ("monthly", "Monthly"),
                                 ],
                                 selection: $repeatRule
@@ -81,10 +96,9 @@ struct TaskEditor: View {
 
                         field("Notes") {
                             TextField("", text: $notes, axis: .vertical)
-                                .font(.system(size: 14.5))
+                                .font(Theme.text(Theme.Size.body))
                                 .lineLimit(5...)
-                                .padding(12)
-                                .background(Theme.ink.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
+                                .crewInput()
                         }
 
                         Button(role: .destructive) {
@@ -92,15 +106,11 @@ struct TaskEditor: View {
                             dismiss()
                         } label: {
                             Text("Delete task")
-                                .fontWeight(.bold)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 13)
-                                .foregroundStyle(Theme.clay)
-                                .background(RoundedRectangle(cornerRadius: 11).stroke(Theme.clay.opacity(0.4), lineWidth: 1))
                         }
-                        .padding(.top, 6)
+                        .buttonStyle(.crew(.destructive, height: Theme.Height.regular))
+                        .padding(.top, Theme.Space.s)
                     }
-                    .padding(20)
+                    .padding(Theme.Space.xl)
                 }
             }
             .foregroundStyle(Theme.ink)
@@ -111,11 +121,12 @@ struct TaskEditor: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save", action: save).fontWeight(.bold)
+                    Button("Save", action: save).fontWeight(.semibold)
                 }
             }
         }
         .onAppear(perform: load)
+        .crewSheet()
     }
 
     private func load() {
@@ -141,38 +152,40 @@ struct TaskEditor: View {
 
     @ViewBuilder
     private func field<C: View>(_ title: String, @ViewBuilder content: () -> C) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
             Eyebrow(text: title)
             content()
         }
     }
 }
 
-/// A wrapping row of mutually exclusive buttons — Picker's segmented style
-/// can't hold a dozen client names without shrinking them to nothing.
+/// Crew's segmented control: a sunken `surface-3` track with the chosen
+/// segment lifted onto `chip-bg`. `tints` colours a chosen segment by meaning.
 struct Segmented: View {
     let options: [(String?, String)]
     @Binding var selection: String?
+    var tints: [String: Color] = [:]
 
     var body: some View {
-        FlowRow(spacing: 7) {
+        HStack(spacing: Theme.Space.xxs) {
             ForEach(options.indices, id: \.self) { i in
                 let (value, title) = options[i]
+                let on = selection == value
                 Button { selection = value } label: {
                     Text(title)
-                        .font(.system(size: 12.5, weight: .semibold))
-                        .padding(.horizontal, 13)
-                        .padding(.vertical, 8)
-                        .foregroundStyle(selection == value ? Theme.bgLo : Theme.ink2)
-                        .background(selection == value ? Theme.ink : .clear, in: RoundedRectangle(cornerRadius: 9))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 9)
-                                .stroke(selection == value ? .clear : Theme.hair, lineWidth: 1)
-                        )
+                        .font(Theme.text(Theme.Size.s, on ? .medium : .regular))
+                        .padding(.horizontal, 10)
+                        .frame(height: 26)
+                        .foregroundStyle(on ? (value.flatMap { tints[$0] } ?? Theme.ink) : Theme.ink2)
+                        .background(on ? Theme.chipBg : .clear, in: RoundedRectangle(cornerRadius: Theme.Radius.control))
+                        .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.control))
                 }
                 .buttonStyle(.plain)
+                .accessibilityAddTraits(on ? .isSelected : [])
             }
         }
+        .padding(Theme.Space.xxs)
+        .background(Theme.surface3, in: RoundedRectangle(cornerRadius: Theme.Radius.card))
     }
 }
 
@@ -186,47 +199,40 @@ struct LockinSheet: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Theme.background.ignoresSafeArea()
-                VStack(alignment: .leading, spacing: 16) {
+                Theme.surface.ignoresSafeArea()
+                VStack(alignment: .leading, spacing: Theme.Space.l) {
                     Text("Keeps your Mac awake — no sleep, no lock screen — until the timer runs out.")
-                        .font(.system(size: 13))
+                        .font(Theme.text(Theme.Size.m))
                         .foregroundStyle(Theme.ink2)
-                        .lineSpacing(2)
+                        .lineSpacing(Theme.Space.xxs)
 
-                    Eyebrow(text: store.state.lockin.active ? "Replace with" : "Keep awake for")
+                    Eyebrow(text: store.state.lockin.active ? "Replace with" : "Keep this Mac awake for")
 
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Theme.Space.s), count: 3), spacing: Theme.Space.s) {
                         ForEach(presets, id: \.self) { m in
                             Button {
                                 store.startLockin(minutes: m)
                                 dismiss()
                             } label: {
                                 Text(labelFor(m))
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 14)
-                                    .overlay(RoundedRectangle(cornerRadius: 11).stroke(Theme.hair, lineWidth: 1))
+                                    .font(Theme.mono(Theme.Size.m, .medium))
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.crew(.chip, height: Theme.Height.regular, fullWidth: true))
                         }
                     }
 
-                    HStack(spacing: 8) {
+                    HStack(spacing: Theme.Space.s) {
                         TextField("Minutes", text: $custom)
                             .keyboardType(.numberPad)
-                            .font(.system(size: 14))
-                            .padding(12)
-                            .background(Theme.ink.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
+                            .font(Theme.mono(Theme.Size.body))
+                            .crewInput()
                         Button("Start") {
                             if let m = Int(custom), m > 0 {
                                 store.startLockin(minutes: m)
                                 dismiss()
                             }
                         }
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(Theme.amber)
-                        .padding(.horizontal, 18).padding(.vertical, 12)
-                        .background(Theme.amberSoft, in: RoundedRectangle(cornerRadius: 10))
+                        .buttonStyle(.crew(.primary, height: Theme.Height.large))
                     }
 
                     if store.state.lockin.active {
@@ -234,16 +240,12 @@ struct LockinSheet: View {
                             store.stopLockin()
                             dismiss()
                         }
-                        .fontWeight(.bold)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 13)
-                        .foregroundStyle(Theme.ink2)
-                        .background(RoundedRectangle(cornerRadius: 11).stroke(Theme.hair, lineWidth: 1))
+                        .buttonStyle(.crew(.destructive, height: Theme.Height.regular))
                     }
 
                     Spacer()
                 }
-                .padding(20)
+                .padding(Theme.Space.xl)
             }
             .foregroundStyle(Theme.ink)
             .navigationTitle(store.state.lockin.active ? "Locked in" : "Lock in")
@@ -255,6 +257,7 @@ struct LockinSheet: View {
             }
         }
         .presentationDetents([.medium])
+        .crewSheet()
     }
 
     private func labelFor(_ m: Int) -> String {
@@ -274,36 +277,41 @@ struct NoteEditor: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Theme.background.ignoresSafeArea()
+                Theme.surface.ignoresSafeArea()
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 15) {
-                        Eyebrow(text: "Title")
-                        TextField("", text: $title)
-                            .font(.system(size: 15, weight: .semibold))
-                            .padding(12)
-                            .background(Theme.ink.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
+                    VStack(alignment: .leading, spacing: 0) {
+                        TextField(
+                            "",
+                            text: $title,
+                            prompt: Text("Title").foregroundStyle(Theme.faint)
+                        )
+                        .font(Theme.text(Theme.Size.xl, .semibold))
+                        .padding(.bottom, Theme.Space.s)
+                        .overlay(alignment: .bottom) {
+                            Rectangle().fill(Theme.line).frame(height: 1)
+                        }
 
-                        Eyebrow(text: "Body")
-                        TextField("", text: $body_, axis: .vertical)
-                            .font(.system(size: 14.5))
-                            .lineLimit(10...)
-                            .padding(12)
-                            .background(Theme.ink.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
+                        TextField(
+                            "",
+                            text: $body_,
+                            prompt: Text("Write it down…").foregroundStyle(Theme.faint),
+                            axis: .vertical
+                        )
+                        .font(Theme.text(Theme.Size.body))
+                        .lineSpacing(5)
+                        .lineLimit(12...)
+                        .padding(.top, Theme.Space.m)
 
                         Button(role: .destructive) {
                             store.deleteNote(note)
                             dismiss()
                         } label: {
                             Text("Delete note")
-                                .fontWeight(.bold)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 13)
-                                .foregroundStyle(Theme.clay)
-                                .background(RoundedRectangle(cornerRadius: 11).stroke(Theme.clay.opacity(0.4), lineWidth: 1))
                         }
-                        .padding(.top, 6)
+                        .buttonStyle(.crew(.destructive, height: Theme.Height.regular))
+                        .padding(.top, Theme.Space.xxl)
                     }
-                    .padding(20)
+                    .padding(Theme.Space.xl)
                 }
             }
             .foregroundStyle(Theme.ink)
@@ -318,7 +326,7 @@ struct NoteEditor: View {
                         store.saveNote(note, title: title, body: body_)
                         dismiss()
                     }
-                    .fontWeight(.bold)
+                    .fontWeight(.semibold)
                 }
             }
         }
@@ -326,5 +334,6 @@ struct NoteEditor: View {
             title = note.title ?? ""
             body_ = note.body ?? ""
         }
+        .crewSheet()
     }
 }
