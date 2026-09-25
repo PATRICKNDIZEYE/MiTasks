@@ -25,10 +25,11 @@ const outDir = path.join(root, 'release', `${NAME}-darwin-arm64`);
 const app = path.join(outDir, `${NAME}.app`);
 const contents = path.join(app, 'Contents');
 const helperSrc = path.join(root, 'native', 'bin', 'mitasks-cal');
+const dictateSrc = path.join(root, 'native', 'bin', 'mitasks-dictate');
 
 // Everything the app needs at runtime.
 const SHIPPED = [
-  'main.js', 'preload.js', 'server.js', 'calendar.js', 'lockin.js',
+  'main.js', 'preload.js', 'server.js', 'calendar.js', 'lockin.js', 'jev.js', 'dictate.js',
   'package.json', 'readme.md', 'renderer', 'mobile',
 ];
 
@@ -74,6 +75,8 @@ step('compiling EventKit helper');
 fs.mkdirSync(path.dirname(helperSrc), { recursive: true });
 run('swiftc', ['-O', '-framework', 'EventKit', '-o', helperSrc,
   path.join(root, 'native', 'mitasks-cal.swift')]);
+run('swiftc', ['-O', '-framework', 'Speech', '-framework', 'AVFoundation', '-o', dictateSrc,
+  path.join(root, 'native', 'mitasks-dictate.swift')]);
 
 /* ---------- 2. copy the Electron tree ---------- */
 step('copying Electron runtime');
@@ -110,6 +113,8 @@ fs.rmSync(path.join(resources, 'default_app.asar'), { force: true });
 fs.copyFileSync(path.join(root, 'build', 'icon.icns'), path.join(resources, 'electron.icns'));
 fs.copyFileSync(helperSrc, path.join(resources, 'mitasks-cal'));
 fs.chmodSync(path.join(resources, 'mitasks-cal'), 0o755);
+fs.copyFileSync(dictateSrc, path.join(resources, 'mitasks-dictate'));
+fs.chmodSync(path.join(resources, 'mitasks-dictate'), 0o755);
 
 const stage = path.join(root, 'release', '.stage');
 fs.rmSync(stage, { recursive: true, force: true });
@@ -144,6 +149,12 @@ function finish() {
   plist.NSCalendarsFullAccessUsageDescription =
     'miTasks shows your meetings beside your tasks and can block time on your calendar.';
   plist.NSCalendarsUsageDescription = plist.NSCalendarsFullAccessUsageDescription;
+  // Same again for voice capture — transcription is on-device, but macOS still
+  // needs a stated reason before it will show either prompt.
+  plist.NSMicrophoneUsageDescription =
+    'miTasks listens when you tap the mic button, so you can speak a task instead of typing it.';
+  plist.NSSpeechRecognitionUsageDescription =
+    'miTasks turns what you say into a task. Speech is recognised on this Mac; the audio is never uploaded.';
 
   // Integrity is keyed on the asar *header*, not the whole file.
   const { headerString } = asar.getRawHeader(asarPath);

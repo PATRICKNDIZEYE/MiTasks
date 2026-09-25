@@ -4,12 +4,16 @@ import SwiftUI
 struct miTasksApp: App {
     @StateObject private var store = Store()
 
+    init() {
+        Theme.applyChrome()
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environmentObject(store)
+                .tint(Theme.primary)
                 .preferredColorScheme(.dark)
-                .tint(Theme.amber)
         }
     }
 }
@@ -72,55 +76,64 @@ struct RootView: View {
     }
 }
 
-/// Wraps a screen in the widget's gradient and gives it the standard header.
-struct Screen<Content: View>: View {
+/// Wraps a screen in the page background and gives it a Crew mission
+/// header: a large title with a control on the right, then a 13 muted meta
+/// line underneath.
+struct Screen<Meta: View, Trailing: View, Content: View>: View {
     let title: String
-    var subtitle: String
-    var trailing: AnyView? = nil
+    @ViewBuilder var meta: Meta
+    @ViewBuilder var trailing: Trailing
     @ViewBuilder var content: Content
 
     @EnvironmentObject private var store: Store
 
     var body: some View {
         ZStack {
-            Theme.background.ignoresSafeArea()
+            Theme.bg.ignoresSafeArea()
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    HStack(alignment: .top, spacing: 10) {
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text(title).font(Theme.display(27))
-                            Eyebrow(text: subtitle)
-                        }
+                    HStack(alignment: .center, spacing: Theme.Space.s) {
+                        Text(title)
+                            .font(Theme.display())
+                            .lineLimit(1)
                         Spacer(minLength: 0)
-                        if let trailing { trailing }
-                        Circle()
-                            .fill(store.connected ? Theme.sage : Theme.clay)
-                            .frame(width: 8, height: 8)
-                            .padding(.top, 15)
+                        trailing
                     }
+                    .frame(minHeight: Theme.Height.large)
+
+                    FlowRow(spacing: Theme.Space.l, lineSpacing: Theme.Space.xs) {
+                        meta
+                    }
+                    .font(Theme.text(Theme.Size.m))
+                    .monospacedDigit()
+                    .foregroundStyle(Theme.muted)
+                    .padding(.top, Theme.Space.xxs)
 
                     if !store.connected {
-                        Text("Showing the last synced copy — your Mac isn't reachable.")
-                            .font(.system(size: 12))
-                            .foregroundStyle(Theme.ink2)
-                            .padding(10)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Theme.clay.opacity(0.1), in: RoundedRectangle(cornerRadius: 11))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 11)
-                                    .stroke(Theme.clay.opacity(0.4), lineWidth: 1)
-                            )
-                            .padding(.top, 14)
+                        StatusStrip(
+                            tint: Theme.red,
+                            fill: Theme.redBg,
+                            title: "Showing the last synced copy — your Mac isn't reachable.",
+                            lines: 2
+                        ) { EmptyView() }
+                        .foregroundStyle(Theme.ink2)
+                        .padding(.top, Theme.Space.m)
                     }
 
                     content
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 18)
-                .padding(.bottom, 28)
+                .padding(.horizontal, Theme.Space.xl)
+                .padding(.top, Theme.Space.m)
+                .padding(.bottom, Theme.Space.s32)
             }
         }
         .foregroundStyle(Theme.ink)
+    }
+}
+
+extension Screen where Trailing == EmptyView {
+    init(title: String, @ViewBuilder meta: () -> Meta, @ViewBuilder content: () -> Content) {
+        self.init(title: title, meta: meta, trailing: { EmptyView() }, content: content)
     }
 }
 
@@ -129,12 +142,18 @@ struct EmptyNote: View {
     let small: String
 
     var body: some View {
-        VStack(spacing: 7) {
-            Text(big).font(.system(size: 17, design: .serif)).italic()
-            Text(small).font(.system(size: 12))
+        VStack(spacing: Theme.Space.xs) {
+            Text(big)
+                .font(Theme.text(Theme.Size.body, .semibold))
+                .foregroundStyle(Theme.ink)
+            Text(small)
+                .font(Theme.text(Theme.Size.m))
+                .foregroundStyle(Theme.muted)
+                .multilineTextAlignment(.center)
         }
-        .foregroundStyle(Theme.ink3)
         .frame(maxWidth: .infinity)
-        .padding(.top, 52)
+        .padding(.horizontal, Theme.Space.xl)
+        .padding(.top, Theme.Space.s40)
+        .padding(.bottom, Theme.Space.xxl)
     }
 }

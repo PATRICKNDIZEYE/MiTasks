@@ -301,6 +301,66 @@ final class Store: ObservableObject {
         return state.notes.first { $0.id == id }
     }
 
+    // MARK: - Voice
+
+    struct Verdict {
+        var ok = false
+        var kind = "task"
+        var label: String?
+        var priority: String?
+        var error: String?
+    }
+
+    /// Asks the Mac to classify a transcript. The Jev key lives only on the
+    /// Mac, so the phone never holds it.
+    func classify(_ transcript: String) async -> Verdict {
+        guard let url = config?.url("/api/classify") else {
+            return Verdict(error: "not paired")
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["transcript": transcript])
+
+        guard let (data, _) = try? await URLSession.shared.data(for: req),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return Verdict(error: "your Mac didn't answer") }
+
+        guard json["ok"] as? Bool == true else {
+            return Verdict(error: json["error"] as? String ?? "not classified")
+        }
+        return Verdict(
+            ok: true,
+            kind: json["kind"] as? String ?? "task",
+            label: json["label"] as? String,
+            priority: json["priority"] as? String
+        )
+    }
+
+    /// Saves a spoken sentence. Whatever the classifier says, the words
+    /// themselves are never lost — a failed call just means an unlabelled task.
+    func saveSpoken(_ spoken: String, verdict: Verdict) {
+        let parsed = QuickAdd.parse(spoken, labels: state.labels, activeLabel: nil)
+        let text = parsed.text.isEmpty ? spoken : parsed.text
+
+        if verdict.ok && verdict.kind == "note" {
+            Task {
+                if let note = await createNote(label: verdict.label) {
+                    saveNote(note, title: String(text.prefix(120)), body: "")
+                }
+            }
+            return
+        }
+
+        var draft = parsed
+        draft.text = text
+        if verdict.ok {
+            if let l = verdict.label { draft.label = l }
+            if let p = verdict.priority { draft.priority = p }
+        }
+        add(draft)
+    }
+
     // MARK: - Derived
 
     var todaysEvents: [CalEvent] {

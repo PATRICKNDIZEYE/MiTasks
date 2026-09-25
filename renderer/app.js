@@ -59,6 +59,12 @@ let lockinState = { active: false };
 
 const $ = (id) => document.getElementById(id);
 const els = {
+  micBtn: $('mic-btn'),
+  voiceStrip: $('voice-strip'),
+  voiceText: $('voice-text'),
+  voiceCancel: $('voice-cancel'),
+  dictateStatus: $('dictate-status'),
+  jevKey: $('jev-key'),
   bubble: $('bubble'),
   bubbleCount: $('bubble-count'),
   bubbleCheck: $('bubble-check'),
@@ -66,11 +72,11 @@ const els = {
   arcFill: $('arc-fill'),
   panel: $('panel'),
   dateLine: $('date-line'),
-  progressStrip: $('progress-strip'),
-  progressFill: $('progress-fill'),
   progressText: $('progress-text'),
+  freeLine: $('free-line'),
   focusStrip: $('focus-strip'),
   focusTask: $('focus-task'),
+  focusSub: $('focus-sub'),
   focusTime: $('focus-time'),
   focusStop: $('focus-stop'),
   settingsBtn: $('settings-btn'),
@@ -78,9 +84,16 @@ const els = {
   input: $('task-input'),
   addBtn: $('add-btn'),
   parseHint: $('parse-hint'),
-  chipRow: $('chip-row'),
+  labelSelect: $('label-select'),
+  scopeDot: $('scope-dot'),
+  tabs: document.querySelectorAll('.tab'),
+  panes: document.querySelectorAll('.pane'),
+  tabCountTasks: $('tab-count-tasks'),
+  tabCountAgenda: $('tab-count-agenda'),
+  tabCountNotes: $('tab-count-notes'),
   pendingList: $('pending-list'),
   doneBlock: $('done-block'),
+  doneToggle: $('done-toggle'),
   doneList: $('done-list'),
   doneCount: $('done-count'),
   clearDone: $('clear-done'),
@@ -100,8 +113,7 @@ const els = {
   focusLabelList: $('focus-label-list'),
   labelList: $('label-list'),
   notesView: $('notes-view'),
-  notesBtn: $('notes-btn'),
-  notesBack: $('notes-back'),
+  notesCount: $('notes-count'),
   noteNew: $('note-new'),
   notesChips: $('notes-chips'),
   noteCards: $('note-cards'),
@@ -128,11 +140,9 @@ const els = {
   loginCheckbox: $('login-checkbox'),
   // Lock-in
   lockinBtn: $('lockin-btn'),
-  lockinStrip: $('lockin-strip'),
   lockinLabel: $('lockin-label'),
   lockinTime: $('lockin-time'),
   lockinPlus: $('lockin-plus'),
-  lockinStop: $('lockin-stop'),
   lockinMenu: $('lockin-menu'),
   lockinCustomMin: $('lockin-custom-min'),
   lockinCustomGo: $('lockin-custom-go'),
@@ -141,8 +151,8 @@ const els = {
   lockinWithFocus: $('lockin-with-focus'),
   // Agenda
   agenda: $('agenda'),
+  agendaTitle: $('agenda-title'),
   agendaFree: $('agenda-free'),
-  agendaCollapse: $('agenda-collapse'),
   agendaList: $('agenda-list'),
   calendarCta: $('calendar-cta'),
   calendarCtaText: $('calendar-cta-text'),
@@ -186,24 +196,6 @@ function flagSvg(size = 10) {
       stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
       <line x1="4" y1="22" x2="4" y2="15" fill="none"/></svg>`;
-}
-
-function clockSvg() {
-  return `<svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor"
-      stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-      <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`;
-}
-
-function repeatSvg() {
-  return `<svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor"
-      stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/>
-      <path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>`;
-}
-
-function notesSvg() {
-  return `<svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor"
-      stroke-width="2.4" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h9"/></svg>`;
 }
 
 function playSvg() {
@@ -467,63 +459,50 @@ function renderParseHint() {
 
 /* ---------- Task rows ---------- */
 
-function metaChip(cls, html, text) {
-  const span = document.createElement('span');
-  span.className = 'meta-item ' + cls;
-  if (html) span.innerHTML = html;
-  if (text) span.appendChild(document.createTextNode(text));
-  return span;
-}
+/// The line under a task's title, and how loudly it speaks: red is late or
+/// high, amber is today, everything else stays quiet.
+function rowStatus(task) {
+  const bits = [];
+  let tone = '';
+  const raise = (t) => {
+    if (t === 'red' || !tone) tone = t;
+  };
 
-function buildMeta(task) {
-  const meta = document.createElement('div');
-  meta.className = 'task-meta';
+  const start = task.startAt ? formatStart(task.startAt) : null;
+  const due = task.due ? formatDue(task.due) : null;
+  const sameDay = start && task.due && task.startAt.slice(0, 10) === task.due;
 
-  if (task.priority) {
-    meta.appendChild(
-      metaChip(`flag-${task.priority}`, flagSvg(), task.priority === 'high' ? 'High' : 'Medium')
-    );
+  if (due) {
+    bits.push(due.cls === 'today' ? 'Due today' : due.cls === 'soon' ? 'Due tomorrow' : due.cls ? due.text : `Due ${due.text}`);
+    if (due.cls === 'overdue') raise('red');
+    else if (due.cls === 'today') raise('amber');
   }
-
-  if (task.startAt) {
-    const info = formatStart(task.startAt);
-    if (info) meta.appendChild(metaChip('start-chip ' + info.cls, clockSvg(), info.text));
+  if (start) {
+    // A start time on the deadline day only needs the time.
+    const time = new Date(Date.parse(task.startAt))
+      .toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    bits.push(sameDay && start.cls !== 'today' ? time : start.text);
+    if (start.cls === 'today') raise('amber');
   }
-
-  if (task.due) {
-    const info = formatDue(task.due);
-    if (info) meta.appendChild(metaChip('due-chip ' + info.cls, null, info.text));
-  }
-
-  if (task.repeat) {
-    meta.appendChild(metaChip('', repeatSvg(), REPEAT_LABEL[task.repeat]));
-  }
-
-  if (task.focusedMs) {
-    meta.appendChild(metaChip('', null, formatMinutes(task.focusedMs)));
-  }
-
-  // Nothing else is flagging this one and it's been sitting a while.
+  if (task.priority === 'high') { bits.push('High'); raise('red'); }
+  else if (task.priority === 'med') { bits.push('Medium'); raise('amber'); }
+  if (task.repeat) bits.push(REPEAT_LABEL[task.repeat]);
   if (isAging(task)) {
     const days = taskAgeDays(task);
-    meta.appendChild(metaChip(`age-chip ${ageClass(days)}`, clockSvg(), `${days}d old`));
+    bits.push(`${days}d old`);
+    if (ageClass(days) === 'hot') raise('red');
+    else if (ageClass(days) === 'warm') raise('amber');
   }
+  if (task.focusedMs) bits.push(`${formatMinutes(task.focusedMs)} focused`);
+  return { text: bits.join(' · '), tone };
+}
 
-  const label = labelFor(task.label);
-  if (label && !activeLabel) {
-    const tag = metaChip('', null, label.name);
-    const dot = document.createElement('span');
-    dot.className = 'dot';
-    dot.style.background = label.color;
-    tag.prepend(dot);
-    meta.appendChild(tag);
-  }
-
-  if (task.notes && task.notes.trim()) {
-    meta.appendChild(metaChip('notes-glyph', notesSvg(), null));
-  }
-
-  return meta.childNodes.length ? meta : null;
+/// Crew's "Needs you": anything late, due today, already started, or high.
+function needsYou(task) {
+  if (task.priority === 'high') return true;
+  if (task.due && dueValue(task) < startOfToday() + DAY_MS) return true;
+  if (task.startAt && Date.parse(task.startAt) <= endOfToday()) return true;
+  return false;
 }
 
 function detailRow(labelText, ...controls) {
@@ -695,9 +674,14 @@ function buildDetail(task) {
   return wrap;
 }
 
-function taskRow(task) {
+/// One task, in one of Crew's two row shapes:
+///   'need' — bold title, a coloured status line and an action on the right
+///            (the "Needs you" rows in Crew's sidebar);
+///   'line' — a single quiet line with a word on the right (Crew's mission list).
+/// `badge` puts the label's colour on the checkbox, like a teammate's status dot.
+function taskRow(task, variant = 'line', badge = false) {
   const li = document.createElement('li');
-  li.className = 'task' + (task.done ? ' done' : '') + (openTaskId === task.id ? ' open' : '');
+  li.className = `task task--${variant}` + (task.done ? ' done' : '') + (openTaskId === task.id ? ' open' : '');
   li.dataset.id = task.id;
 
   const main = document.createElement('div');
@@ -708,6 +692,13 @@ function taskRow(task) {
   checkbox.setAttribute('aria-label', task.done ? 'Mark as not done' : 'Mark as done');
   checkbox.innerHTML = checkSvg();
   checkbox.addEventListener('click', () => toggleTask(task.id, li));
+  const label = labelFor(task.label);
+  if (badge && label) {
+    const dot = document.createElement('span');
+    dot.className = 'checkbox__label';
+    dot.style.background = label.color;
+    checkbox.appendChild(dot);
+  }
 
   const body = document.createElement('div');
   body.className = 'task-body';
@@ -715,6 +706,8 @@ function taskRow(task) {
     openTaskId = openTaskId === task.id ? null : task.id;
     render();
   });
+
+  const status = rowStatus(task);
 
   if (openTaskId === task.id) {
     // Open task: the title becomes editable in place.
@@ -749,17 +742,40 @@ function taskRow(task) {
     body.appendChild(text);
   }
 
-  const meta = buildMeta(task);
-  if (meta) body.appendChild(meta);
+  if (variant === 'need' && status.text) {
+    const sub = document.createElement('div');
+    sub.className = 'task-sub' + (status.tone ? ` tone-${status.tone}` : '');
+    sub.textContent = status.text;
+    body.appendChild(sub);
+  }
+
+  main.append(checkbox, body);
+
+  if (variant === 'line' && !task.done && status.text && openTaskId !== task.id) {
+    const word = document.createElement('span');
+    word.className = 'task-word' + (status.tone ? ` tone-${status.tone}` : '');
+    word.textContent = status.text;
+    main.appendChild(word);
+  }
 
   const del = document.createElement('button');
   del.className = 'delete-btn';
   del.setAttribute('aria-label', 'Delete task');
+  del.title = 'Delete';
   del.innerHTML = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor"
       stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
   del.addEventListener('click', () => deleteTask(task.id));
+  main.appendChild(del);
 
-  main.append(checkbox, body, del);
+  if (variant === 'need' && !task.done) {
+    const act = document.createElement('button');
+    act.className = 'row-action';
+    act.textContent = 'Focus';
+    act.title = `Focus on this for ${state.settings.focusMinutes || 25} minutes`;
+    act.addEventListener('click', (e) => { e.stopPropagation(); startFocus(task.id); });
+    main.appendChild(act);
+  }
+
   li.appendChild(main);
 
   if (openTaskId === task.id) li.appendChild(buildDetail(task));
@@ -767,74 +783,106 @@ function taskRow(task) {
   return li;
 }
 
-/* ---------- Chips ---------- */
-
-function renderChips() {
-  els.chipRow.textContent = '';
-
-  const mkChip = (name, color, isActive, onClick) => {
-    const chip = document.createElement('button');
-    chip.className = 'chip' + (isActive ? ' active' : '');
-    if (color) {
-      const dot = document.createElement('span');
-      dot.className = 'dot';
-      dot.style.background = color;
-      chip.appendChild(dot);
-    }
-    chip.appendChild(document.createTextNode(name));
-    chip.addEventListener('click', onClick);
-    els.chipRow.appendChild(chip);
-    return chip;
-  };
-
-  mkChip('All', null, activeLabel === null, () => {
-    activeLabel = null;
-    render();
-  });
-
-  for (const label of state.labels) {
-    const pending = state.tasks.filter((t) => t.label === label.name && !t.done).length;
-    const title = pending ? `${label.name} · ${pending} pending` : label.name;
-    const chip = mkChip(label.name, label.color, activeLabel === label.name, () => {
-      activeLabel = activeLabel === label.name ? null : label.name;
-      render();
-      els.input.focus();
-    });
-    chip.title = title;
+/// A Crew section head: title, a coloured count, and a quiet hint on the right.
+function sectionHead(title, count, tone, hint) {
+  const li = document.createElement('li');
+  li.className = 'sec';
+  const t = document.createElement('span');
+  t.className = 'sec__title';
+  t.textContent = title;
+  li.appendChild(t);
+  if (count) {
+    const n = document.createElement('span');
+    n.className = 'sec__count' + (tone ? ` sec__count--${tone}` : '');
+    n.textContent = String(count);
+    li.appendChild(n);
   }
-
-  const addChip = document.createElement('button');
-  addChip.className = 'chip add-chip';
-  addChip.textContent = '+ Label';
-  addChip.addEventListener('click', () => showNewLabelInput(addChip));
-  els.chipRow.appendChild(addChip);
+  if (hint) {
+    const h = document.createElement('span');
+    h.className = 'sec__hint';
+    h.textContent = hint;
+    li.appendChild(h);
+  }
+  return li;
 }
 
-function showNewLabelInput(addChip) {
+/// A label's group head inside "Up next", like a repo in Crew's mission list.
+function groupHead(label, name, count) {
+  const li = document.createElement('li');
+  li.className = 'group';
+  const dot = document.createElement('span');
+  dot.className = 'dot';
+  if (label) dot.style.background = label.color;
+  const n = document.createElement('span');
+  n.className = 'group__name';
+  n.textContent = name;
+  const c = document.createElement('span');
+  c.className = 'group__count';
+  c.textContent = String(count);
+  li.append(dot, n, c);
+  return li;
+}
+
+/* ---------- Label scope ---------- */
+
+const NEW_LABEL = '\u0000new';
+
+/// The label picker in the composer. It filters the list and labels new
+/// tasks, the same job the chip row used to do.
+function renderScope() {
+  const sel = els.labelSelect;
+  sel.textContent = '';
+  const add = (value, text) => {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = text;
+    sel.appendChild(opt);
+  };
+  add('', 'All labels');
+  for (const label of state.labels) {
+    const pending = state.tasks.filter((t) => t.label === label.name && !t.done).length;
+    add(label.name, pending ? `${label.name}  ${pending}` : label.name);
+  }
+  add(NEW_LABEL, 'New label…');
+  sel.value = activeLabel || '';
+
+  const label = labelFor(activeLabel);
+  els.scopeDot.hidden = !label;
+  if (label) els.scopeDot.style.background = label.color;
+}
+
+function showNewLabelInput() {
+  const scope = els.labelSelect.parentElement;
   const input = document.createElement('input');
   input.id = 'new-label-input';
-  input.placeholder = 'Label name…';
+  input.placeholder = 'Label name';
   input.maxLength = 24;
-  els.chipRow.replaceChild(input, addChip);
+  scope.hidden = true;
+  scope.after(input);
   input.focus();
 
-  const commit = () => {
+  let finished = false;
+  const finish = (commit) => {
+    if (finished) return;
+    finished = true;
     const name = input.value.trim();
-    if (name && !labelFor(name)) {
+    if (commit && name && !labelFor(name)) {
       const color = LABEL_COLORS[state.labels.length % LABEL_COLORS.length];
       state.labels.push({ name, color });
       activeLabel = name;
       save();
     }
+    input.remove();
+    scope.hidden = false;
     render();
   };
 
   input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') commit();
-    if (e.key === 'Escape') render();
+    if (e.key === 'Enter') finish(true);
+    if (e.key === 'Escape') finish(false);
     e.stopPropagation();
   });
-  input.addEventListener('blur', commit);
+  input.addEventListener('blur', () => finish(true));
 }
 
 /* ---------- Bubble & progress ---------- */
@@ -877,12 +925,10 @@ function renderProgress() {
   // Panel progress follows the active label filter; the bubble stays global.
   const scoped = visibleTasks();
   const scopedDone = scoped.filter((t) => t.done).length;
-  const scopedRatio = scoped.length ? scopedDone / scoped.length : 0;
-  els.progressStrip.hidden = scoped.length === 0;
-  els.progressFill.style.width = scopedRatio * 100 + '%';
-  els.progressText.textContent = activeLabel
-    ? `${scopedDone} of ${scoped.length} · ${activeLabel}`
-    : `${scopedDone} of ${scoped.length} done`;
+  els.progressText.hidden = scoped.length === 0;
+  const count = document.createElement('b');
+  count.textContent = String(scopedDone);
+  els.progressText.replaceChildren(count, ` of ${scoped.length} done`);
 }
 
 function setPetFace(face) {
@@ -955,6 +1001,12 @@ function renderFocusStrip() {
   els.focusStrip.hidden = !focus;
   if (!focus) return;
   els.focusTask.textContent = focus.task.text;
+  els.focusTask.title = focus.task.text;
+  const sub = [];
+  if (focus.task.priority) sub.push(focus.task.priority === 'high' ? 'High' : 'Medium');
+  if (focus.task.label) sub.push(focus.task.label);
+  sub.push(`${focus.task.focusedMs ? formatMinutes(focus.task.focusedMs) + ' before this' : 'First session'}`);
+  els.focusSub.textContent = sub.join(' · ');
   const secs = Math.ceil(focus.remaining / 1000);
   const mm = Math.floor(secs / 60);
   const ss = String(secs % 60).padStart(2, '0');
@@ -1051,6 +1103,8 @@ function renderAgenda() {
 
   els.agenda.hidden = !connected;
   els.calendarCta.hidden = connected;
+  els.freeLine.hidden = true;
+  els.tabCountAgenda.textContent = '';
 
   if (!connected) {
     els.calendarCtaText.textContent = blocked
@@ -1062,13 +1116,18 @@ function renderAgenda() {
 
   const now = Date.now();
   const events = todaysEvents();
-  els.agenda.classList.toggle('folded', !!state.settings.agendaFolded);
 
   const free = Math.max(0, endOfToday() - now - busyMs(events, now, endOfToday()));
   const left = events.filter((e) => !e.allDay && eventEnd(e) > now).length;
+  const live = events.filter((e) => !e.allDay && eventStart(e) <= now && eventEnd(e) > now).length;
+  els.agendaTitle.textContent = live ? `${live} now` : left ? String(left) : '';
+  els.agendaTitle.className = 'sec__count' + (live ? ' sec__count--amber' : '');
   els.agendaFree.textContent = events.length
-    ? `${formatMinutes(free)} free` + (left ? ` · ${left} to go` : '')
-    : 'Nothing booked';
+    ? (left ? `${left} to go · ` : '') + `${formatMinutes(free)} free`
+    : 'Nothing booked today';
+  els.tabCountAgenda.textContent = left ? String(left) : '';
+  els.freeLine.hidden = false;
+  els.freeLine.textContent = `${formatMinutes(free)} free`;
 
   els.agendaList.textContent = '';
   let prevEnd = null;
@@ -1185,14 +1244,18 @@ function lockinClock(ms) {
   return h ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`;
 }
 
+/// Lock-in is a pill switch in the header, like Crew's Auto-approve.
 function renderLockin() {
   const active = !!lockinState.active;
-  els.lockinStrip.hidden = !active;
-  els.lockinBtn.classList.toggle('active', active);
+  els.lockinBtn.classList.toggle('pill--on', active);
+  els.lockinBtn.classList.toggle('pill--open', !els.lockinMenu.hidden);
+  els.lockinBtn.title = active ? 'Locked in — click to end' : 'Lock in — keep this Mac awake';
+  els.lockinPlus.hidden = !active;
   if (active) els.lockinMenu.hidden = true;
-  if (!active) return;
-  els.lockinLabel.textContent = lockinState.reason === 'focus' ? 'Awake · focus' : 'Locked in';
-  els.lockinTime.textContent = lockinClock(lockinState.endAt - Date.now());
+  els.lockinLabel.textContent = !active
+    ? 'Lock in'
+    : lockinState.reason === 'focus' ? 'Awake' : 'Locked in';
+  els.lockinTime.textContent = active ? lockinClock(lockinState.endAt - Date.now()) : '';
 }
 
 function lockinTick() {
@@ -1233,7 +1296,7 @@ function renderAging() {
     li.addEventListener('click', () => {
       activeLabel = null;
       openTaskId = task.id;
-      closeSettings();
+      setTab('tasks');
       render();
     });
     els.agingList.appendChild(li);
@@ -1289,7 +1352,7 @@ function renderClientHealth() {
     const fill = document.createElement('div');
     fill.className = 'client-fill';
     fill.style.width = (row.total ? (row.done / row.total) * 100 : 0) + '%';
-    fill.style.background = label ? label.color : 'rgba(240,234,221,0.3)';
+    fill.style.background = label ? label.color : 'var(--faint)';
     track.appendChild(fill);
 
     const meta = document.createElement('span');
@@ -1340,7 +1403,7 @@ function renderCalendarSettings() {
     name.className = 'cal-name';
     const dot = document.createElement('span');
     dot.className = 'dot';
-    dot.style.background = cal.color || 'rgba(240,234,221,0.3)';
+    dot.style.background = cal.color || 'var(--faint)';
     dot.style.marginRight = '7px';
     name.append(dot, document.createTextNode(cal.title));
     name.title = cal.title;
@@ -1418,10 +1481,14 @@ async function connectCalendar(btn) {
 
 /* ---------- Render ---------- */
 
+let doneOpen = false;
+let activeTab = 'tasks';
+
 function render() {
   const tasks = visibleTasks();
+  const focusId = state.focus ? state.focus.taskId : null;
   const pending = tasks
-    .filter((t) => !t.done)
+    .filter((t) => !t.done && t.id !== focusId)
     .sort(
       (a, b) =>
         (PRIORITY_RANK[a.priority] ?? 2) - (PRIORITY_RANK[b.priority] ?? 2) ||
@@ -1430,24 +1497,76 @@ function render() {
     );
   const done = tasks.filter((t) => t.done).sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0));
 
-  els.pendingList.textContent = '';
-  for (const t of pending) els.pendingList.appendChild(taskRow(t));
+  // Needs you: oldest deadline first, then priority.
+  const needs = pending
+    .filter(needsYou)
+    .sort(
+      (a, b) =>
+        dueValue(a) - dueValue(b) ||
+        (PRIORITY_RANK[a.priority] ?? 2) - (PRIORITY_RANK[b.priority] ?? 2)
+    );
+  const next = pending.filter((t) => !needsYou(t));
+
+  const list = els.pendingList;
+  list.textContent = '';
+
+  if (needs.length) {
+    list.appendChild(sectionHead('Needs you', needs.length, 'amber', 'most urgent first'));
+    for (const t of needs) list.appendChild(taskRow(t, 'need', !activeLabel));
+  }
+
+  if (next.length) {
+    const title = needs.length || focusId ? 'Up next' : 'To do';
+    if (activeLabel) {
+      list.appendChild(sectionHead(title, next.length, '', activeLabel));
+      for (const t of next) list.appendChild(taskRow(t, 'line'));
+    } else {
+      list.appendChild(sectionHead(title, next.length, '', 'by label'));
+      // Group by label, in the order the labels were made; unlabelled last.
+      const groups = [...state.labels.map((l) => l.name), null];
+      for (const name of groups) {
+        const rows = next.filter((t) => (t.label || null) === name || (name === null && !labelFor(t.label)));
+        if (!rows.length) continue;
+        list.appendChild(groupHead(labelFor(name), name || 'No label', rows.length));
+        for (const t of rows) list.appendChild(taskRow(t, 'line'));
+      }
+    }
+  }
 
   els.doneList.textContent = '';
-  for (const t of done) els.doneList.appendChild(taskRow(t));
-
+  for (const t of done) els.doneList.appendChild(taskRow(t, 'line'));
   els.doneBlock.hidden = done.length === 0;
+  els.doneBlock.classList.toggle('open', doneOpen);
+  els.doneList.hidden = !doneOpen;
+  els.clearDone.hidden = !doneOpen;
   els.doneCount.textContent = String(done.length);
-  els.emptyState.hidden = !(pending.length === 0 && done.length === 0);
+  els.emptyState.hidden = !(pending.length === 0 && done.length === 0 && !focusId);
 
-  els.input.placeholder = activeLabel ? `Add to ${activeLabel}…` : 'What needs doing?';
+  const open = tasks.filter((t) => !t.done).length;
+  els.tabCountTasks.textContent = open ? String(open) : '';
+  els.tabCountNotes.textContent = state.notes.length ? String(state.notes.length) : '';
+  els.input.placeholder = activeLabel ? `Add to ${activeLabel}` : 'Add a task';
 
-  renderChips();
+  renderScope();
   renderProgress();
   renderFocusStrip();
   renderAgenda();
   renderLockin();
-  if (!els.settings.hidden) renderInsights();
+  if (activeTab === 'insights') renderInsights();
+}
+
+/// Tasks, Agenda, Notes and Insights are tabs under the composer, like the
+/// tabs under a Crew mission's title.
+function setTab(tab) {
+  activeTab = tab;
+  for (const t of els.tabs) t.classList.toggle('tab--on', t.dataset.tab === tab);
+  for (const p of els.panes) p.hidden = p.dataset.pane !== tab;
+  if (tab !== 'notes') {
+    els.noteEditor.hidden = true;
+    openNoteId = null;
+  }
+  if (tab === 'notes') renderNotesList();
+  if (tab === 'insights') renderInsights();
 }
 
 /* ---------- Insights / settings ---------- */
@@ -1535,7 +1654,7 @@ function renderInsights() {
     li.addEventListener('click', () => {
       activeLabel = null;
       openTaskId = task.id;
-      closeSettings();
+      setTab('tasks');
       render();
     });
     els.attentionList.appendChild(li);
@@ -1589,6 +1708,7 @@ function renderNotesList() {
   for (const label of state.labels) mk(label.name, label.color, notesLabel === label.name, label.name);
 
   const notes = notesFor(notesLabel);
+  els.notesCount.textContent = notes.length ? String(notes.length) : '';
   els.noteCards.textContent = '';
   els.notesEmpty.hidden = notes.length > 0;
 
@@ -1727,14 +1847,11 @@ async function copyOpenNote() {
 function openNotes() {
   closeSettings();
   notesLabel = activeLabel;
-  renderNotesList();
-  els.notesView.hidden = false;
+  setTab('notes');
 }
 
 function closeNotes() {
-  els.noteEditor.hidden = true;
-  openNoteId = null;
-  els.notesView.hidden = true;
+  setTab('tasks');
 }
 
 let labelPendingDelete = null;
@@ -1793,8 +1910,8 @@ function renderLabelManager() {
 }
 
 function openSettings() {
-  closeNotes();
-  renderInsights();
+  els.noteEditor.hidden = true;
+  openNoteId = null;
   renderLabelManager();
   renderCalendarSettings();
   els.settings.hidden = false;
@@ -1923,6 +2040,120 @@ function addTask() {
   els.parseHint.hidden = true;
   save();
   render();
+}
+
+/* ---------- Voice capture ---------- */
+
+let voiceState = 'idle'; // idle | listening | working
+let voiceTranscript = '';
+
+function setVoiceUI(mode, text) {
+  voiceState = mode;
+  els.micBtn.classList.toggle('on', mode !== 'idle');
+  els.voiceStrip.hidden = mode === 'idle';
+  els.voiceStrip.classList.toggle('working', mode === 'working');
+  if (text != null) els.voiceText.textContent = text;
+}
+
+async function toggleVoice() {
+  if (voiceState === 'working') return;
+  if (voiceState === 'listening') { await finishVoice(); return; }
+
+  const status = await window.api.dictateStatus();
+  if (status.speech !== 'authorized' || status.microphone !== 'authorized') {
+    setVoiceUI('working', 'Waiting for permission…');
+    const granted = await window.api.dictateRequest();
+    if (granted.speech !== 'authorized' || granted.microphone !== 'authorized') {
+      setVoiceUI('working', 'Microphone or speech access is off — System Settings › Privacy');
+      setTimeout(() => setVoiceUI('idle'), 4000);
+      renderDictateStatus(granted);
+      return;
+    }
+    renderDictateStatus(granted);
+  }
+
+  voiceTranscript = '';
+  setVoiceUI('listening', 'Listening…');
+  const started = await window.api.dictateStart();
+  if (!started.ok) {
+    setVoiceUI('working', started.error || 'Could not start listening');
+    setTimeout(() => setVoiceUI('idle'), 4000);
+  }
+}
+
+/// Stops listening, then lets Jev name the label and priority. Whatever Jev
+/// says, the words themselves are never lost — a failed call just means an
+/// unlabelled task.
+async function finishVoice() {
+  setVoiceUI('working', voiceTranscript || 'Finishing…');
+  const { transcript } = await window.api.dictateStop();
+  const spoken = (transcript || voiceTranscript || '').trim();
+
+  if (!spoken) {
+    setVoiceUI('working', "Didn't catch that");
+    setTimeout(() => setVoiceUI('idle'), 2500);
+    return;
+  }
+
+  setVoiceUI('working', 'Sorting it out…');
+  const verdict = await window.api.classifyVoice(spoken);
+
+  // Dates come from the same quick-add grammar the typed box uses; Jev only
+  // decides label, priority and whether this was a task at all.
+  const parsed = parseQuickAdd(spoken);
+  const text = parsed.text || spoken;
+
+  if (verdict.ok && verdict.kind === 'note') {
+    if (!Array.isArray(state.notes)) state.notes = [];
+    state.notes.push({
+      id: uid(),
+      label: verdict.label || parsed.label,
+      title: text.slice(0, 120),
+      body: '',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+    setVoiceUI('working', 'Saved as a note');
+  } else {
+    state.tasks.unshift({
+      id: uid(),
+      text,
+      label: (verdict.ok && verdict.label) || parsed.label,
+      done: false,
+      createdAt: Date.now(),
+      doneAt: null,
+      notes: '',
+      priority: (verdict.ok && verdict.priority) || parsed.priority,
+      due: parsed.due,
+      startAt: parsed.startAt,
+      repeat: parsed.repeat,
+      reminded: false,
+      dueReminded: false,
+      focusedMs: 0,
+    });
+    setVoiceUI('working', verdict.ok ? 'Added' : 'Added — ' + (verdict.error || 'not classified'));
+  }
+
+  save();
+  render();
+  setTimeout(() => setVoiceUI('idle'), verdict.ok ? 1400 : 3500);
+}
+
+async function cancelVoice() {
+  if (voiceState === 'listening') await window.api.dictateStop();
+  voiceTranscript = '';
+  setVoiceUI('idle');
+}
+
+function renderDictateStatus(status) {
+  if (!els.dictateStatus || !status) return;
+  const ok = status.speech === 'authorized' && status.microphone === 'authorized';
+  els.dictateStatus.textContent = ok
+    ? 'Ready'
+    : status.speech === 'denied' || status.microphone === 'denied'
+      ? 'Off — System Settings › Privacy'
+      : 'Not set up yet';
+  els.dictateStatus.className = 'setting-note ' + (ok ? 'ok' : 'bad');
 }
 
 function shiftDateStr(str, repeat) {
@@ -2154,7 +2385,8 @@ async function init() {
   window.api.onMeetingNudge(() => pulseBubble());
 
   window.api.onOpenInsights(() => {
-    openSettings();
+    closeSettings();
+    setTab('insights');
     render();
   });
 
@@ -2196,6 +2428,20 @@ async function init() {
     }
   });
 
+  els.micBtn.addEventListener('click', toggleVoice);
+  els.voiceCancel.addEventListener('click', cancelVoice);
+  window.api.onDictatePartial((text) => {
+    voiceTranscript = text;
+    if (voiceState === 'listening') els.voiceText.textContent = text || 'Listening…';
+  });
+  window.api.dictateStatus().then(renderDictateStatus);
+
+  els.jevKey.value = (state.settings && state.settings.jevKey) || '';
+  els.jevKey.addEventListener('change', () => {
+    state.settings.jevKey = els.jevKey.value.trim();
+    save();
+  });
+
   els.addBtn.addEventListener('click', addTask);
   els.input.addEventListener('input', renderParseHint);
   els.input.addEventListener('keydown', (e) => {
@@ -2207,13 +2453,13 @@ async function init() {
         els.lockinMenu.hidden = true;
       } else if (!els.noteEditor.hidden) {
         closeNoteEditor();
-      } else if (!els.notesView.hidden) {
-        closeNotes();
       } else if (!els.settings.hidden) {
         closeSettings();
       } else if (e.target.tagName === 'TEXTAREA' || openTaskId) {
         openTaskId = null;
         render();
+      } else if (activeTab !== 'tasks') {
+        setTab('tasks');
       } else {
         window.api.setMode('collapsed');
       }
@@ -2245,8 +2491,8 @@ async function init() {
     if (lockinState.active) { applyLockin(window.api.lockinStop()); return; }
     els.lockinMenu.hidden = !els.lockinMenu.hidden;
     if (!els.lockinMenu.hidden) els.lockinCustomMin.value = state.settings.lockInMinutes || 60;
+    renderLockin();
   });
-  els.lockinStop.addEventListener('click', () => applyLockin(window.api.lockinStop()));
   els.lockinPlus.addEventListener('click', () => applyLockin(window.api.lockinExtend(15)));
   for (const btn of els.lockinMenu.querySelectorAll('.lockin-opts button')) {
     btn.addEventListener('click', () => startLockin(parseInt(btn.dataset.min, 10)));
@@ -2265,10 +2511,17 @@ async function init() {
     save();
   });
 
-  els.agendaCollapse.addEventListener('click', () => {
-    state.settings.agendaFolded = !state.settings.agendaFolded;
-    save();
-    renderAgenda();
+  for (const tab of els.tabs) tab.addEventListener('click', () => setTab(tab.dataset.tab));
+  els.labelSelect.addEventListener('change', () => {
+    const value = els.labelSelect.value;
+    if (value === NEW_LABEL) { showNewLabelInput(); return; }
+    activeLabel = value || null;
+    render();
+    els.input.focus();
+  });
+  els.doneToggle.addEventListener('click', () => {
+    doneOpen = !doneOpen;
+    render();
   });
   els.calendarConnect.addEventListener('click', () => connectCalendar(els.calendarConnect));
   els.calendarConnect2.addEventListener('click', () => connectCalendar(els.calendarConnect2));
@@ -2279,8 +2532,6 @@ async function init() {
   els.focusStop.addEventListener('click', () => stopFocus(false));
   els.quitBtn.addEventListener('click', () => window.api.quit());
 
-  els.notesBtn.addEventListener('click', openNotes);
-  els.notesBack.addEventListener('click', closeNotes);
   els.noteNew.addEventListener('click', newNote);
   els.editorBack.addEventListener('click', closeNoteEditor);
   els.editorCopy.addEventListener('click', copyOpenNote);
@@ -2293,6 +2544,7 @@ async function init() {
   });
 
   await initSettingsControls();
+  setTab('tasks');
   render();
 }
 

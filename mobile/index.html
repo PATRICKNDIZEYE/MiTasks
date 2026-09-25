@@ -7,371 +7,684 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="miTasks" />
 <meta name="mobile-web-app-capable" content="yes" />
-<meta name="theme-color" content="#141210" />
-<link rel="manifest" href="/manifest.webmanifest" />
+<meta name="color-scheme" content="dark" />
+<meta name="theme-color" content="#161615" />
+<!-- The server wants the key cookie on every request, manifest included. -->
+<link rel="manifest" href="/manifest.webmanifest" crossorigin="use-credentials" />
+<link rel="icon" href="/icon.png" />
 <link rel="apple-touch-icon" href="/icon.png" />
 <title>miTasks</title>
 <style>
-@font-face { font-family:"Fraunces"; src:url("/fonts/Fraunces.woff2") format("woff2"); font-weight:100 900; font-display:swap; }
-@font-face { font-family:"Fraunces"; src:url("/fonts/Fraunces-Italic.woff2") format("woff2"); font-weight:100 900; font-style:italic; font-display:swap; }
-@font-face { font-family:"Satoshi"; src:url("/fonts/Satoshi-Variable.woff2") format("woff2"); font-weight:300 900; font-display:swap; }
+@font-face { font-family:"IBM Plex Sans"; src:url("/fonts/IBMPlexSans-400.woff2") format("woff2"); font-weight:400; font-style:normal; font-display:swap; }
+@font-face { font-family:"IBM Plex Sans"; src:url("/fonts/IBMPlexSans-400-Italic.woff2") format("woff2"); font-weight:400; font-style:italic; font-display:swap; }
+@font-face { font-family:"IBM Plex Sans"; src:url("/fonts/IBMPlexSans-500.woff2") format("woff2"); font-weight:500; font-style:normal; font-display:swap; }
+@font-face { font-family:"IBM Plex Sans"; src:url("/fonts/IBMPlexSans-600.woff2") format("woff2"); font-weight:600 700; font-style:normal; font-display:swap; }
+@font-face { font-family:"IBM Plex Mono"; src:url("/fonts/IBMPlexMono-400.woff2") format("woff2"); font-weight:400; font-display:swap; }
+@font-face { font-family:"IBM Plex Mono"; src:url("/fonts/IBMPlexMono-500.woff2") format("woff2"); font-weight:500 700; font-display:swap; }
 
+/*
+ * miTasks on the phone, built from Crew's parts. See DESIGN.md.
+ * Same structure as the Mac widget (renderer/): a mission header with the
+ * Lock-in pill, the composer, then sidebar-style sections. Always dark.
+ */
+
+/* Crew's dark theme, verbatim (renderer/style.css). */
 :root {
-  --serif:"Fraunces", ui-serif, Georgia, serif;
-  --sans:"Satoshi", -apple-system, sans-serif;
-  --bg-hi:#201d18; --bg-lo:#141210;
-  --ink:#f0eadd;
-  --ink-2:rgba(240,234,221,0.56);
-  --ink-3:rgba(240,234,221,0.3);
-  --hair:rgba(240,234,221,0.09);
-  --amber:#d9a441;
-  --amber-soft:rgba(217,164,65,0.14);
-  --clay:#c96f5a;
-  --sage:#8fa876;
-  --spring:cubic-bezier(0.34,1.35,0.5,1);
-  --tabbar:calc(env(safe-area-inset-bottom) + 62px);
+  --sans:"IBM Plex Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --bg:#111110;
+  --surface:#161615;
+  --surface-2:#1c1c1a;
+  --surface-3:#252523;
+  --ink:#edece9;
+  --ink-2:#c7c5c0;
+  --muted:#8f8d88;
+  --faint:#64625e;
+  --line:#262624;
+  --line-strong:#363532;
+  --primary:#edece9;
+  --primary-ink:#111110;
+  --hover:rgba(255,255,255,.055);
+  --select:rgba(255,255,255,.1);
+  --scroll:rgba(255,255,255,.24);
+  --brand-dot:#f2a93b;
+  --amber:#e4a53a; --amber-bg:#2e2414;
+  --red:#ec6a5a;   --red-bg:#32191a;
+  --blue:#79a3ff;  --blue-bg:#18223a;
+  --green:#52c48f; --green-bg:#13271e;
+  --focus:#79a3ff;
+  --status-running:#72c293;
+  --chip-bg:#3b3b3c;
+  --chip-bg-hover:#474748;
+  --shadow-sm:0 1px 2px rgba(0,0,0,.4);
+  --shadow:0 2px 8px rgba(0,0,0,.35), 0 18px 48px rgba(0,0,0,.45);
+  --scrim:rgba(0,0,0,.56);
+
+  --h-sm:28px; --h:32px; --h-lg:40px;
+  --r-xs:4px; --r-sm:6px; --r:8px; --r-lg:12px;
+  --t-xs:11px; --t-sm:12px; --t-md:13px; --t-base:14px; --t-lg:16px; --t-xl:20px; --t-2xl:28px;
+  --ease-out:cubic-bezier(.2,.7,.2,1);
+  --tabbar:calc(env(safe-area-inset-bottom) + 56px);
+  color-scheme:dark;
 }
 
 * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-html { background:var(--bg-lo); }
+html { background:var(--surface); }
 body {
   min-height:100vh;
-  background:linear-gradient(172deg, var(--bg-hi), var(--bg-lo) 55%) fixed;
-  font-family:var(--sans); color:var(--ink);
+  background:var(--surface);
+  font:var(--t-base)/1.5 var(--sans); color:var(--ink);
   -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
   -webkit-user-select:none; user-select:none;
   overscroll-behavior-y:none;
 }
 button, input, textarea, select { font-family:inherit; border:none; background:none; color:inherit; }
-button svg { display:block; }
+button svg { display:block; flex:none; }
+ul { list-style:none; }
 [hidden] { display:none !important; }
+:focus { outline:none; }
+:focus-visible { outline:2px solid var(--focus); outline-offset:2px; border-radius:var(--r-sm); }
 
-.view {
-  padding:calc(env(safe-area-inset-top) + 18px) 20px calc(var(--tabbar) + 28px);
-  min-height:100vh;
-}
+/* A label or calendar colour. */
+.dot { display:inline-block; flex:none; width:7px; height:7px; border-radius:50%; background:var(--faint); }
 
-/* ---------- Header ---------- */
-header { display:flex; align-items:flex-start; gap:10px; }
-.head-text { flex:1; min-width:0; }
-h1 { font-family:var(--serif); font-size:27px; font-weight:600; letter-spacing:-0.3px; }
-.date-line { margin-top:5px; font-size:10.5px; font-weight:700; letter-spacing:1.6px; text-transform:uppercase; color:var(--ink-3); }
-.head-btn {
-  width:36px; height:36px; border-radius:10px; margin-top:2px; flex:none;
-  display:flex; align-items:center; justify-content:center; color:var(--ink-3);
-  transition:color .2s, background .2s;
+.tone-red { color:var(--red) !important; }
+.tone-amber { color:var(--amber) !important; }
+
+/* ---------- Shared controls ---------- */
+
+/* Crew's sidebar action: a filled grey chip ("Review", "Reply"). */
+.row-action {
+  flex:none; display:inline-flex; align-items:center; justify-content:center; gap:6px;
+  height:var(--h-sm); padding:0 12px; border-radius:var(--r-sm);
+  background:var(--chip-bg); color:var(--ink);
+  font-size:var(--t-sm); font-weight:500; white-space:nowrap;
+  transition:background 100ms ease, color 100ms ease;
 }
-.head-btn.active { color:var(--amber); background:var(--amber-soft); }
-#conn { width:8px; height:8px; border-radius:50%; margin-top:15px; flex:none; background:var(--clay); transition:background .3s; }
-#conn.on { background:var(--sage); }
+.row-action:active { background:var(--chip-bg-hover); }
+.row-action.danger { color:var(--red); }
+.row-action:disabled { opacity:.4; }
+
+.quiet-btn {
+  flex:none; height:var(--h-sm); padding:0 8px; border-radius:var(--r-sm);
+  font-size:var(--t-sm); font-weight:500; color:var(--muted);
+  transition:background 100ms ease, color 100ms ease;
+}
+.quiet-btn:active { background:var(--surface-3); color:var(--ink); }
+
+/* Primary: ink, not an accent. */
+.btn-primary {
+  flex:none; display:inline-flex; align-items:center; justify-content:center;
+  height:var(--h-lg); padding:0 16px; border-radius:var(--r-sm);
+  background:var(--primary); color:var(--primary-ink);
+  font-size:var(--t-base); font-weight:500;
+}
+.btn-primary:active { background:color-mix(in srgb, var(--primary) 86%, var(--surface)); }
+
+/* ---------- Top bar ---------- */
+
+.topbar {
+  display:flex; align-items:center; gap:8px;
+  height:calc(env(safe-area-inset-top) + 44px);
+  padding:env(safe-area-inset-top) 20px 0;
+  border-bottom:1px solid var(--line);
+}
+.lockup { display:inline-flex; align-items:center; gap:8px; color:var(--ink); }
+.lockup__name { font-weight:600; font-size:var(--t-base); letter-spacing:-.02em; }
+.mark__dot { fill:var(--brand-dot); }
+.topbar__spacer { flex:1; }
+#conn { display:inline-flex; align-items:center; gap:6px; font-size:var(--t-sm); color:var(--muted); }
+#conn .dot { width:6px; height:6px; background:var(--faint); transition:background 160ms ease; }
+#conn.off .dot { background:var(--red); }
+#conn.on .dot { background:var(--status-running); }
+
+/* ---------- Views ---------- */
+
+.view { padding-bottom:calc(var(--tabbar) + 24px); }
+
+/* ---------- Mission header ---------- */
+
+.mission-head { padding:20px 20px 0; }
+.mission-head__row { display:flex; align-items:center; gap:8px; }
+h1 { flex:1; min-width:0; font-size:var(--t-2xl); font-weight:600; line-height:1.2; letter-spacing:-.012em; }
+.mission-head__meta {
+  display:flex; align-items:center; flex-wrap:wrap; gap:4px 16px; margin-top:4px;
+  font-size:var(--t-md); color:var(--muted);
+}
+.mission-head__meta b { color:var(--ink); font-weight:600; font-variant-numeric:tabular-nums; }
+.free { color:var(--green); }
+
+/* The Lock-in pill: Crew's Auto-approve switch. */
+.pill {
+  flex:none; display:inline-flex; align-items:center; gap:8px;
+  height:var(--h); padding:0 12px 0 6px;
+  border:1px solid var(--line-strong); border-radius:999px;
+  color:var(--muted); font-size:var(--t-md); font-weight:500; white-space:nowrap;
+  transition:border-color 120ms ease, color 120ms ease, background 120ms ease;
+}
+.pill:active { color:var(--ink); border-color:var(--muted); }
+.pill__switch {
+  position:relative; flex:none; width:30px; height:18px; border-radius:9px;
+  background:var(--line-strong); transition:background 120ms ease;
+}
+.pill__switch::after {
+  content:""; position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%;
+  background:var(--muted); transition:transform 120ms ease, background 120ms ease;
+}
+.pill.pill--on { border-color:color-mix(in srgb, var(--status-running) 50%, transparent); color:var(--status-running); }
+.pill.pill--on:active { background:var(--green-bg); }
+.pill--on .pill__switch { background:var(--status-running); }
+.pill--on .pill__switch::after { transform:translateX(12px); background:#eafff3; }
+.pill__time { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+.pill__time:empty { display:none; }
 
 /* ---------- Offline notice ---------- */
+
 #stale {
-  margin-top:14px; padding:10px 13px; border-radius:11px;
-  border:1px solid rgba(201,111,90,0.4); background:rgba(201,111,90,0.1);
-  font-size:12px; line-height:1.45; color:var(--ink-2);
+  display:flex; align-items:flex-start; gap:8px;
+  margin:12px 20px 0; padding:8px 12px; border-radius:var(--r);
+  background:var(--red-bg); font-size:var(--t-sm); line-height:1.5; color:var(--ink-2);
+}
+#stale .dot { margin-top:6px; background:var(--red); }
+
+/* ---------- Composer ---------- */
+
+.composer {
+  margin:16px 20px 0; padding:8px 6px 6px 12px;
+  border:1px solid var(--line-strong); border-radius:var(--r-lg);
+  background:var(--surface); box-shadow:var(--shadow-sm);
+  transition:border-color 100ms ease;
+}
+.composer:focus-within { border-color:var(--muted); }
+/* 16px so iOS doesn't zoom the page when the field takes focus. */
+#task-input {
+  display:block; width:100%; height:28px; padding:0 6px 0 0;
+  font:var(--t-lg) var(--sans); color:var(--ink); background:transparent;
+  -webkit-user-select:text; user-select:text;
+}
+#task-input::placeholder { color:var(--faint); }
+#parse-hint { font-size:var(--t-sm); color:var(--muted); }
+#parse-hint:empty { display:none; }
+.composer__bar { display:flex; align-items:center; gap:4px; margin-top:8px; }
+.composer__spacer { flex:1; }
+
+/* Label scope: a quiet dropdown with a dot, like Crew's "by repo". The real
+   select sits invisibly on top at 16px so iOS opens its picker without zooming. */
+.scope {
+  position:relative; display:inline-flex; align-items:center; gap:6px;
+  height:var(--h-sm); margin-left:-6px; padding:0 6px; border-radius:var(--r-sm);
+  color:var(--muted); font-size:var(--t-md);
+  transition:background 100ms ease, color 100ms ease;
+}
+.scope:active { background:var(--surface-3); color:var(--ink); }
+#scope-text { max-width:170px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#label-select {
+  position:absolute; inset:0; width:100%; opacity:0; font-size:16px;
+  -webkit-appearance:none; appearance:none;
 }
 
-/* ---------- Progress ---------- */
-.progress-strip { display:flex; align-items:center; gap:10px; margin-top:18px; }
-.progress-track { flex:1; height:3px; border-radius:2px; background:rgba(240,234,221,0.1); overflow:hidden; }
-.progress-fill { height:100%; width:0%; border-radius:2px; background:var(--amber); transition:width .5s var(--spring); }
-.progress-text { font-size:11px; font-weight:700; color:var(--ink-2); white-space:nowrap; }
-
-/* ---------- Focus + lock-in strips ---------- */
-.strip {
-  display:flex; align-items:center; gap:10px; margin-top:14px; padding:11px 14px;
-  border-radius:12px; border:1px solid rgba(217,164,65,0.45); background:var(--amber-soft);
+/* Crew's Send button: a filled grey chip with an arrow. */
+#add-btn {
+  flex:none; display:inline-flex; align-items:center; gap:6px;
+  height:var(--h); padding:0 12px; border-radius:var(--r-sm);
+  background:var(--chip-bg); color:var(--ink);
+  font-size:var(--t-md); font-weight:500;
+  transition:background 100ms ease, transform 100ms ease;
 }
-.strip .dot { flex:none; width:7px; height:7px; border-radius:50%; background:var(--amber); animation:blink 1.6s ease infinite; }
-@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.35} }
-.strip .who { flex:1; min-width:0; font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.strip .clock { font-family:var(--serif); font-size:16px; font-weight:600; color:var(--amber); font-variant-numeric:tabular-nums; }
-.strip .act { padding:5px 9px; border-radius:8px; font-size:11px; font-weight:700; color:var(--ink-2); background:rgba(240,234,221,0.07); }
-#lockin-strip { border-color:rgba(143,168,118,0.4); background:rgba(143,168,118,0.1); }
-#lockin-strip .dot { background:var(--sage); animation:breathe 3.4s ease-in-out infinite; }
-#lockin-strip .clock { color:var(--sage); }
-@keyframes breathe { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.45;transform:scale(.8)} }
+#add-btn:active { background:var(--chip-bg-hover); transform:scale(.96); }
 
-/* ---------- Add bar ---------- */
-.add-bar {
-  display:flex; align-items:center; gap:8px; margin-top:18px;
-  border-bottom:1px solid var(--hair); padding-bottom:9px;
-}
-.add-bar input { flex:1; font-size:15px; background:none; outline:none; }
-.add-bar input::placeholder { color:var(--ink-3); }
-.add-bar button { width:30px; height:30px; border-radius:9px; display:flex; align-items:center; justify-content:center; background:var(--amber-soft); color:var(--amber); }
-#parse-hint { margin-top:8px; font-size:11px; color:var(--amber); min-height:14px; }
+/* ---------- Panes & sections ---------- */
 
-/* ---------- Chips ---------- */
-.chip-row { display:flex; gap:7px; margin-top:14px; overflow-x:auto; scrollbar-width:none; padding-bottom:2px; }
-.chip-row::-webkit-scrollbar { display:none; }
-.chip {
-  flex:none; padding:5px 11px; border-radius:20px; font-size:11.5px; font-weight:600;
-  border:1px solid var(--hair); color:var(--ink-2); white-space:nowrap;
-  display:flex; align-items:center; gap:5px;
-}
-.chip.on { border-color:transparent; background:var(--ink); color:var(--bg-lo); }
-.chip .swatch { width:6px; height:6px; border-radius:50%; }
+.pane { padding:8px 12px 0; }
+
+/* A Crew sidebar section head: "Needs you 4 ······ oldest first". */
+.sec { display:flex; align-items:baseline; gap:6px; padding:12px 8px 6px; }
+.sec__title { font-size:var(--t-md); font-weight:600; color:var(--ink-2); }
+.sec__count { font-size:var(--t-md); font-weight:600; font-variant-numeric:tabular-nums; color:var(--muted); }
+.sec__count--amber { color:var(--amber); }
+.sec__count--run { color:var(--status-running); }
+.sec__hint { margin-left:auto; font-size:var(--t-sm); color:var(--muted); white-space:nowrap; }
+.sec__action { margin-left:auto; align-self:center; }
+
+/* Label group inside "Up next", like a repo in Crew's mission list. */
+.group { display:flex; align-items:center; gap:8px; padding:8px 8px 2px; font-size:var(--t-md); color:var(--ink); }
+.group__name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.group__count { font-size:var(--t-sm); color:var(--muted); font-variant-numeric:tabular-nums; }
 
 /* ---------- Task rows ---------- */
-.list { margin-top:16px; display:flex; flex-direction:column; }
-.task {
-  display:flex; align-items:flex-start; gap:11px; padding:12px 0;
-  border-bottom:1px solid var(--hair);
-}
-.box {
-  flex:none; width:21px; height:21px; margin-top:1px; border-radius:7px;
-  border:1.5px solid var(--ink-3); display:flex; align-items:center; justify-content:center;
-  transition:border-color .2s, background .2s;
-}
-.box.on { border-color:var(--amber); background:var(--amber); color:var(--bg-lo); }
-.task-main { flex:1; min-width:0; }
-.task-text { font-size:14.5px; line-height:1.4; word-break:break-word; }
-.task.done .task-text { color:var(--ink-3); text-decoration:line-through; }
-.meta { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
-.tag {
-  font-size:10px; font-weight:700; letter-spacing:.4px; padding:2.5px 7px; border-radius:6px;
-  background:rgba(240,234,221,0.07); color:var(--ink-2); display:flex; align-items:center; gap:4px;
-}
-.tag .swatch { width:5px; height:5px; border-radius:50%; }
-.tag.due-now { background:rgba(201,111,90,0.16); color:var(--clay); }
-.tag.due-soon { background:var(--amber-soft); color:var(--amber); }
-.tag.pri-high { background:rgba(201,111,90,0.16); color:var(--clay); }
-.tag.pri-med { background:var(--amber-soft); color:var(--amber); }
-.tag.warm { background:var(--amber-soft); color:var(--amber); }
-.tag.hot { background:rgba(201,111,90,0.16); color:var(--clay); }
-.play { flex:none; width:28px; height:28px; border-radius:8px; display:flex; align-items:center; justify-content:center; color:var(--ink-3); }
 
-.empty { margin-top:52px; text-align:center; color:var(--ink-3); }
-.empty .big { font-family:var(--serif); font-size:17px; font-style:italic; }
-.empty .small { margin-top:7px; font-size:12px; }
+.task { border-radius:var(--r); transition:background 120ms ease, opacity .3s ease, transform .3s ease; }
+.task:active { background:var(--hover); }
+.task.completing { transform:translateX(12px); opacity:0; }
+.task-main { display:flex; align-items:center; gap:12px; }
+.task--need .task-main { padding:8px 6px 8px 8px; }
+.task--line .task-main { padding:8px 8px 8px 12px; gap:10px; }
 
-.block-head {
-  display:flex; align-items:center; gap:8px; margin-top:26px; margin-bottom:2px;
-  font-size:10.5px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--ink-3);
+.checkbox {
+  position:relative; flex:none; width:20px; height:20px; border-radius:50%;
+  border:1.5px solid var(--line-strong);
+  display:grid; place-items:center; color:transparent;
+  transition:background 120ms ease, border-color 120ms ease, transform .2s ease;
 }
-.block-head .rule { flex:1; height:1px; background:var(--hair); }
-.block-head button { font-size:10.5px; font-weight:700; letter-spacing:1.2px; color:var(--ink-3); }
+/* A bigger invisible hit area than the ring itself. */
+.checkbox::before { content:""; position:absolute; inset:-10px; }
+.task--line .checkbox { width:16px; height:16px; }
+.checkbox:active { transform:scale(.88); }
+.checkbox svg { width:10px; height:10px; }
+.task--line .checkbox svg { width:8px; height:8px; }
+.task.done .checkbox, .task.completing .checkbox { background:var(--green); border-color:var(--green); color:var(--primary-ink); }
+/* The label's colour, sitting on the checkbox like a teammate's status dot. */
+.checkbox__label {
+  position:absolute; right:-4px; bottom:-4px; width:10px; height:10px; border-radius:50%;
+  border:2px solid var(--surface);
+}
+.checkbox--static::before { display:none; }
+
+.task-body { flex:1; min-width:0; }
+.task-text {
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font-size:var(--t-md); line-height:1.4; color:var(--ink);
+}
+.task--need .task-text { font-weight:600; }
+.task-sub {
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font-size:var(--t-sm); line-height:1.4; color:var(--muted);
+}
+.task-word {
+  flex:none; max-width:45%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font-size:var(--t-sm); color:var(--muted);
+}
+.task.done .task-text { color:var(--muted); text-decoration:line-through; text-decoration-color:var(--faint); }
+
+/* ---------- In focus: Crew's active-thread row ---------- */
+
+.active-row {
+  display:flex; align-items:center; gap:12px; padding:8px 6px 8px 8px;
+  border-radius:var(--r); background:var(--select);
+}
+.active-row .checkbox { border-color:var(--status-running); }
+.active-row__text { flex:1; min-width:0; }
+.active-row__title {
+  display:flex; align-items:center; gap:6px; min-width:0;
+  font-size:var(--t-md); font-weight:600; line-height:1.4;
+}
+#focus-task { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* Crew's "auto" tag, in the running colour. */
+.run-tag {
+  flex:none; padding:0 5px; border-radius:var(--r-xs);
+  border:1px solid color-mix(in srgb, var(--status-running) 45%, transparent);
+  color:var(--status-running); font:500 var(--t-xs)/15px var(--mono);
+}
+.active-row__sub { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:var(--t-sm); color:var(--muted); }
+#focus-time { flex:none; font:400 var(--t-sm) var(--mono); font-variant-numeric:tabular-nums; color:var(--ink-2); }
+
+/* ---------- Done ---------- */
+
+#done-block { margin-top:8px; }
+#done-header { display:flex; align-items:center; gap:6px; padding:4px 8px; min-height:var(--h); }
+.fold { display:inline-flex; align-items:center; gap:6px; height:var(--h); font-size:var(--t-md); color:var(--ink-2); }
+.chev { transition:transform 120ms ease; }
+#done-block.open .chev { transform:rotate(90deg); }
+#done-header .sec__hint b { font-weight:400; font-variant-numeric:tabular-nums; }
+
+/* ---------- Empty ---------- */
+
+.empty { text-align:center; padding:40px 20px 28px; }
+.empty-title { font-size:var(--t-base); font-weight:600; }
+.empty-sub { margin-top:4px; font-size:var(--t-md); color:var(--muted); }
 
 /* ---------- Agenda ---------- */
-.event {
-  display:flex; gap:11px; padding:12px 0; border-bottom:1px solid var(--hair);
-}
-.event .rail { flex:none; width:2.5px; border-radius:2px; background:var(--ink-3); }
-.event.now .rail { background:var(--amber); }
-.event-main { flex:1; min-width:0; }
-.event-time { font-size:10.5px; font-weight:700; letter-spacing:.5px; color:var(--ink-3); font-variant-numeric:tabular-nums; }
-.event.now .event-time { color:var(--amber); }
-.event-title { margin-top:3px; font-size:14.5px; line-height:1.35; word-break:break-word; }
-.event.now .event-title { font-weight:600; }
-.event-meta { margin-top:4px; font-size:11.5px; color:var(--ink-3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.gap {
-  display:flex; align-items:center; gap:9px; padding:9px 0 9px 14px;
-  font-size:11.5px; color:var(--sage); border-bottom:1px solid var(--hair);
-}
-.gap .line { width:16px; height:1px; background:rgba(143,168,118,0.45); }
 
-/* ---------- Insights ---------- */
-.stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:16px; }
-.stat { padding:14px; border-radius:13px; border:1px solid var(--hair); background:rgba(240,234,221,0.03); }
-.stat .n { font-family:var(--serif); font-size:26px; font-weight:600; line-height:1; }
-.stat .n small { font-size:13px; font-weight:500; color:var(--ink-3); }
-.stat .k { margin-top:6px; font-size:10.5px; font-weight:700; letter-spacing:1.1px; text-transform:uppercase; color:var(--ink-3); }
-.client { padding:12px 0; border-bottom:1px solid var(--hair); }
-.client-top { display:flex; align-items:center; gap:8px; }
-.client-name { flex:1; min-width:0; font-size:13.5px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:flex; align-items:center; gap:7px; }
-.client-name .swatch { width:7px; height:7px; border-radius:50%; flex:none; }
-.client-count { font-size:11px; font-weight:700; color:var(--ink-3); font-variant-numeric:tabular-nums; }
-.bar { margin-top:8px; height:3px; border-radius:2px; background:rgba(240,234,221,0.08); overflow:hidden; }
-.bar span { display:block; height:100%; border-radius:2px; }
-.quiet { margin-top:6px; font-size:11px; color:var(--clay); }
+.agenda-item { display:flex; align-items:flex-start; gap:12px; padding:8px; border-radius:var(--r); }
+.agenda-rail { flex:none; width:2px; align-self:stretch; border-radius:1px; background:var(--line-strong); }
+.agenda-time {
+  flex:none; order:-1; width:64px; white-space:nowrap;
+  font:var(--t-sm)/20px var(--mono); color:var(--muted); font-variant-numeric:tabular-nums;
+}
+.agenda-body { flex:1; min-width:0; }
+.agenda-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:var(--t-md); line-height:20px; }
+.agenda-sub { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:var(--t-sm); color:var(--muted); }
+/* The meeting happening now: selected like Crew's open thread, in amber. */
+.agenda-item.now { background:var(--select); }
+.agenda-item.now .agenda-rail { background:var(--amber); }
+.agenda-item.now .agenda-time, .agenda-item.now .agenda-sub { color:var(--amber); }
+.agenda-item.now .agenda-name { font-weight:600; }
+.agenda-item.past { opacity:.45; }
+.agenda-gap { padding:2px 8px 2px 94px; font-size:var(--t-sm); color:var(--green); }
 
 /* ---------- Notes ---------- */
-.note { padding:13px 0; border-bottom:1px solid var(--hair); }
-.note-title { font-size:14.5px; font-weight:600; word-break:break-word; }
-.note-prev { margin-top:4px; font-size:12px; line-height:1.45; color:var(--ink-3); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+
+.chips { display:flex; flex-wrap:wrap; gap:6px; padding:0 8px 8px; }
+/* Crew's option chip, used for picking a label. */
+.chip {
+  display:inline-flex; align-items:center; gap:6px; height:var(--h-sm); padding:0 12px;
+  border:1px solid var(--line-strong); border-radius:999px;
+  color:var(--ink-2); font-size:var(--t-sm);
+  transition:border-color 100ms ease, color 100ms ease, background 100ms ease;
+}
+.chip.active { border-color:var(--ink-2); background:var(--select); color:var(--ink); }
+.chip .dot { width:6px; height:6px; }
+
+.note-card { padding:8px; border-radius:var(--r); transition:background 120ms ease; }
+.note-card:active { background:var(--hover); }
+.note-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:var(--t-md); font-weight:600; line-height:1.4; }
+.note-preview {
+  margin-top:2px; font-size:var(--t-sm); line-height:1.45; color:var(--muted);
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+}
+.note-meta { display:flex; align-items:center; gap:6px; margin-top:4px; font-size:var(--t-sm); color:var(--faint); }
+.note-meta .dot { width:6px; height:6px; }
+
+/* ---------- Insights ---------- */
+
+.stat-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; padding:8px 8px 4px; }
+/* Crew's metric card: small label on top, the number under it. */
+.stat { min-width:0; padding:8px 12px 10px; border:1px solid var(--line); border-radius:var(--r); background:var(--surface-2); }
+.stat span { display:block; font-size:var(--t-xs); color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.stat b { display:block; font-size:var(--t-xl); font-weight:600; line-height:1.3; font-variant-numeric:tabular-nums; }
+.stat-warn b { color:var(--red); }
+
+.attention-item {
+  display:flex; align-items:center; gap:8px; min-height:var(--h);
+  padding:4px 8px; border-radius:var(--r); transition:background 120ms ease;
+}
+.attention-item.tap:active { background:var(--hover); }
+.attention-text {
+  flex:1; min-width:0; display:flex; align-items:center; gap:8px;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:var(--t-md);
+}
+.attention-text > span:last-child { overflow:hidden; text-overflow:ellipsis; }
+.attention-why { flex:none; font-size:var(--t-sm); color:var(--amber); }
+.attention-why.overdue { color:var(--red); }
+.attention-why.quiet { color:var(--muted); }
+
+.client-row { display:flex; align-items:center; gap:12px; min-height:var(--h); padding:0 8px; }
+.client-name {
+  flex:none; width:112px; display:flex; align-items:center; gap:8px;
+  overflow:hidden; white-space:nowrap; font-size:var(--t-md);
+}
+.client-name > span:last-child { overflow:hidden; text-overflow:ellipsis; }
+.client-track { flex:1; height:4px; border-radius:2px; background:var(--surface-3); overflow:hidden; }
+.client-fill { height:100%; border-radius:2px; transition:width .4s ease; }
+.client-meta { flex:none; font-size:var(--t-sm); color:var(--muted); font-variant-numeric:tabular-nums; }
+.client-meta.quiet { color:var(--red); }
 
 /* ---------- Tab bar ---------- */
+
 #tabbar {
   position:fixed; left:0; right:0; bottom:0; z-index:40;
-  display:flex; padding:8px 8px calc(env(safe-area-inset-bottom) + 8px);
-  background:rgba(20,18,16,0.86); backdrop-filter:blur(18px) saturate(1.3);
-  -webkit-backdrop-filter:blur(18px) saturate(1.3);
-  border-top:1px solid var(--hair);
+  display:flex; padding:4px 8px env(safe-area-inset-bottom);
+  background:var(--surface);
+  background:color-mix(in srgb, var(--surface) 84%, transparent);
+  backdrop-filter:blur(20px) saturate(1.4);
+  -webkit-backdrop-filter:blur(20px) saturate(1.4);
+  border-top:1px solid var(--line);
 }
 #tabbar button {
-  flex:1; display:flex; flex-direction:column; align-items:center; gap:4px;
-  padding:6px 0; color:var(--ink-3); transition:color .2s;
+  position:relative; flex:1; display:flex; flex-direction:column; align-items:center; gap:2px;
+  height:48px; justify-content:center; color:var(--muted); transition:color 120ms ease;
 }
-#tabbar button.on { color:var(--amber); }
-#tabbar .lbl { font-size:9.5px; font-weight:700; letter-spacing:.7px; text-transform:uppercase; }
-#tabbar .pip { position:absolute; top:4px; right:50%; margin-right:-16px; width:5px; height:5px; border-radius:50%; background:var(--amber); }
-#tabbar button { position:relative; }
+#tabbar button.on { color:var(--ink); }
+#tabbar .lbl { font-size:var(--t-xs); font-weight:500; }
+#tabbar .pip {
+  position:absolute; top:6px; right:50%; margin-right:-16px; width:7px; height:7px; border-radius:50%;
+  background:var(--amber); border:1.5px solid var(--surface); box-sizing:content-box;
+}
 
 /* ---------- Sheet ---------- */
+
 #backdrop {
-  position:fixed; inset:0; z-index:50; background:rgba(10,9,8,0.62);
-  backdrop-filter:blur(3px); -webkit-backdrop-filter:blur(3px);
-  opacity:0; pointer-events:none; transition:opacity .28s;
+  position:fixed; inset:0; z-index:50; background:var(--scrim);
+  opacity:0; pointer-events:none; transition:opacity 160ms ease;
 }
 #backdrop.on { opacity:1; pointer-events:auto; }
 #sheet {
   position:fixed; left:0; right:0; bottom:0; z-index:60; max-height:88vh; overflow-y:auto;
-  background:var(--bg-hi); border-radius:22px 22px 0 0;
-  border-top:1px solid var(--hair);
-  padding:10px 20px calc(env(safe-area-inset-bottom) + 24px);
-  transform:translateY(102%); transition:transform .34s var(--spring);
+  background:var(--surface-2); border:1px solid var(--line-strong); border-bottom:none;
+  border-radius:var(--r-lg) var(--r-lg) 0 0; box-shadow:var(--shadow);
+  padding:8px 20px calc(env(safe-area-inset-bottom) + 20px);
+  transform:translateY(102%); transition:transform 240ms var(--ease-out);
   -webkit-overflow-scrolling:touch;
 }
 #sheet.on { transform:translateY(0); }
-.grab { width:34px; height:4px; border-radius:2px; background:var(--ink-3); margin:0 auto 16px; opacity:.5; }
-.sheet-title { font-family:var(--serif); font-size:19px; font-weight:600; margin-bottom:14px; }
-.field { margin-bottom:15px; }
-.field-k { font-size:10px; font-weight:700; letter-spacing:1.3px; text-transform:uppercase; color:var(--ink-3); margin-bottom:7px; }
-.field input, .field textarea, .field select {
-  width:100%; font-size:14.5px; padding:10px 12px; border-radius:10px;
-  background:rgba(240,234,221,0.05); border:1px solid var(--hair); outline:none;
+.grab { width:36px; height:4px; border-radius:2px; background:var(--line-strong); margin:0 auto 12px; }
+.sheet-head { display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+.sheet-title { flex:1; font-size:var(--t-lg); font-weight:600; line-height:1.3; }
+.sheet-sub { font-size:var(--t-sm); color:var(--muted); }
+
+.detail-title, .field-input, .detail-row input {
+  -webkit-user-select:text; user-select:text;
 }
-.field textarea { resize:none; line-height:1.5; min-height:92px; }
-.field input:focus, .field textarea:focus, .field select:focus { border-color:rgba(217,164,65,0.5); }
-.seg { display:flex; gap:7px; flex-wrap:wrap; }
-.seg button {
-  padding:8px 13px; border-radius:9px; font-size:12.5px; font-weight:600;
-  border:1px solid var(--hair); color:var(--ink-2);
+.detail-title {
+  width:100%; height:var(--h-lg); padding:0 12px; margin-bottom:8px;
+  border:1px solid var(--line-strong); border-radius:var(--r-sm); background:var(--surface);
+  font:600 var(--t-lg) var(--sans); color:var(--ink);
 }
-.seg button.on { border-color:transparent; background:var(--ink); color:var(--bg-lo); }
-.sheet-acts { display:flex; gap:9px; margin-top:20px; }
-.sheet-acts button { flex:1; padding:13px; border-radius:11px; font-size:13.5px; font-weight:700; }
-.btn-primary { background:var(--amber); color:#241d10; }
-.btn-ghost { border:1px solid var(--hair); color:var(--ink-2); }
-.btn-danger { border:1px solid rgba(201,111,90,0.4); color:var(--clay); }
-.time-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
-.time-grid button { padding:14px 0; border-radius:11px; border:1px solid var(--hair); font-size:14px; font-weight:600; }
-.time-grid button:active { background:var(--amber-soft); border-color:var(--amber); }
-.custom-row { display:flex; gap:8px; margin-top:10px; }
-.custom-row input { flex:1; }
-.custom-row button { padding:0 18px; border-radius:10px; background:var(--amber-soft); color:var(--amber); font-weight:700; font-size:13px; }
+.detail-row { display:flex; align-items:center; flex-wrap:wrap; gap:8px; min-height:var(--h-lg); padding:4px 0; }
+.detail-label { width:68px; flex:none; font-size:var(--t-sm); color:var(--muted); }
+.detail-chips { display:flex; flex-wrap:wrap; gap:6px; flex:1; min-width:0; }
+.detail-row input[type="date"], .detail-row input[type="datetime-local"], .field-input {
+  flex:1; min-width:0; height:var(--h-lg); padding:0 12px;
+  border:1px solid var(--line-strong); border-radius:var(--r-sm); background:var(--surface);
+  font:var(--t-lg) var(--sans); color:var(--ink); color-scheme:dark;
+}
+.detail-row input:focus, .detail-title:focus, .field-input:focus, #sheet textarea:focus { border-color:var(--focus); }
+input::-webkit-calendar-picker-indicator { opacity:.55; }
+#sheet textarea {
+  display:block; width:100%; min-height:96px; margin-top:8px; padding:8px 12px;
+  border:1px solid var(--line-strong); border-radius:var(--r); background:var(--surface);
+  font:var(--t-lg)/1.5 var(--sans); color:var(--ink); resize:none;
+  -webkit-user-select:text; user-select:text;
+}
+#sheet textarea::placeholder, .detail-title::placeholder, .field-input::placeholder { color:var(--faint); }
+.clear-due {
+  flex:none; width:var(--h); height:var(--h); border-radius:var(--r-sm);
+  display:grid; place-items:center; color:var(--faint);
+}
+.clear-due:active { background:var(--red-bg); color:var(--red); }
+
+/* Crew's segmented control: a sunken track, the chosen segment lifted. */
+.seg { display:inline-flex; flex-wrap:wrap; gap:2px; padding:2px; border-radius:var(--r); background:var(--surface-3); }
+.seg-btn {
+  display:inline-flex; align-items:center; gap:4px; height:var(--h-sm); padding:0 12px;
+  border-radius:var(--r-sm); font-size:var(--t-sm); color:var(--ink-2);
+  transition:background 100ms ease, color 100ms ease;
+}
+.seg-btn.active { background:var(--chip-bg); color:var(--ink); box-shadow:var(--shadow-sm); }
+.seg-btn.seg-med.active { color:var(--amber); }
+.seg-btn.seg-high.active { color:var(--red); }
+
+.sheet-acts { display:flex; align-items:center; gap:8px; margin-top:16px; }
+.sheet-acts .spacer { flex:1; }
+.sheet-acts .row-action { height:var(--h-lg); padding:0 16px; font-size:var(--t-base); }
+
+.lockin-opts { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+.lockin-opts button {
+  height:var(--h-lg); border-radius:var(--r-sm); background:var(--chip-bg); color:var(--ink);
+  font:500 var(--t-md) var(--mono); font-variant-numeric:tabular-nums;
+}
+.lockin-opts button:active { background:var(--chip-bg-hover); }
+.lockin-custom { display:flex; gap:6px; margin-top:8px; }
+.lockin-custom .field-input { font-family:var(--mono); }
+.sheet-note { margin:4px 0 8px; font-size:var(--t-sm); color:var(--muted); }
 </style>
 </head>
 <body>
 
+<!-- Top bar: Crew's mark and the connection state. -->
+<div class="topbar">
+  <span class="lockup" aria-label="miTasks">
+    <svg class="mark" width="17" height="17" viewBox="176 176 672 672" aria-hidden="true">
+      <g fill="none" stroke="currentColor" stroke-width="100" stroke-linecap="round">
+        <path d="M728.5,637.0 A250,250 0 0 1 443.1,752.3" />
+        <path d="M315.0,665.9 A250,250 0 0 1 315.0,358.1" />
+        <path d="M443.1,271.7 A250,250 0 0 1 728.5,387.0" />
+      </g>
+      <circle class="mark__dot" cx="762" cy="512" r="62" />
+    </svg>
+    <span class="lockup__name">miTasks</span>
+  </span>
+  <span class="topbar__spacer"></span>
+  <span id="conn"><span class="dot"></span><span id="conn-text"></span></span>
+</div>
+
+<div id="stale" hidden><span class="dot"></span><span>Showing the last synced copy — your Mac isn't reachable. Changes need the widget running.</span></div>
+
 <!-- ============ TODAY ============ -->
 <section class="view" id="view-today">
-  <header>
-    <div class="head-text">
+  <div class="mission-head">
+    <div class="mission-head__row">
       <h1>Today</h1>
-      <div class="date-line" id="date-line"></div>
+      <button id="lockin-plus" class="quiet-btn" hidden>+15</button>
+      <button id="lockin-btn" class="pill" aria-label="Lock in">
+        <span class="pill__switch"></span>
+        <span id="lockin-label">Lock in</span>
+        <span id="lockin-time" class="pill__time"></span>
+      </button>
     </div>
-    <button class="head-btn" id="lockin-btn" aria-label="Lock in">
-      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4Z"/>
-        <line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/>
-      </svg>
-    </button>
-    <div id="conn"></div>
-  </header>
-
-  <div id="stale" hidden>Showing the last synced copy — your Mac isn't reachable. Changes need the widget running.</div>
-
-  <div class="progress-strip">
-    <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
-    <div class="progress-text" id="progress-text"></div>
+    <div class="mission-head__meta">
+      <span id="date-line"></span>
+      <span id="progress-text"></span>
+      <span id="free-line" class="free"></span>
+    </div>
   </div>
 
-  <div class="strip" id="lockin-strip" hidden>
-    <div class="dot"></div>
-    <div class="who">Locked in</div>
-    <div class="clock" id="lockin-time"></div>
-    <button class="act" id="lockin-plus">+15</button>
-    <button class="act" id="lockin-stop">Stop</button>
+  <!-- Crew's composer: the box you type into, with its controls underneath. -->
+  <div class="composer">
+    <input id="task-input" placeholder="Add a task" autocomplete="off" autocapitalize="sentences" enterkeyhint="done" />
+    <div id="parse-hint"></div>
+    <div class="composer__bar">
+      <span class="scope">
+        <span id="scope-dot" class="dot" hidden></span>
+        <span id="scope-text">All labels</span>
+        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        <select id="label-select" aria-label="Label filter"></select>
+      </span>
+      <span class="composer__spacer"></span>
+      <button id="add-btn" aria-label="Add task">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+        Add
+      </button>
+    </div>
   </div>
 
-  <div class="strip" id="focus-strip" hidden>
-    <div class="dot"></div>
-    <div class="who" id="focus-task"></div>
-    <div class="clock" id="focus-time"></div>
-    <button class="act" id="focus-stop">Stop</button>
+  <div class="pane">
+    <div id="focus-block" hidden>
+      <div class="sec">
+        <span class="sec__title">In focus</span>
+        <span class="sec__count sec__count--run">1</span>
+        <span class="sec__hint">what you're on</span>
+      </div>
+      <div class="active-row" id="focus-row">
+        <span class="checkbox checkbox--static"></span>
+        <div class="active-row__text">
+          <div class="active-row__title"><span id="focus-task"></span><span class="run-tag">focus</span></div>
+          <div class="active-row__sub" id="focus-sub"></div>
+        </div>
+        <b id="focus-time"></b>
+        <button id="focus-stop" class="row-action">Stop</button>
+      </div>
+    </div>
+
+    <ul id="pending-list"></ul>
+
+    <div class="empty" id="empty" hidden>
+      <p class="empty-title">Nothing on your plate</p>
+      <p class="empty-sub">Add the next thing above — try “call Jev tomorrow 3pm !high”.</p>
+    </div>
+
+    <div id="done-block" hidden>
+      <div id="done-header">
+        <button id="done-toggle" class="fold">
+          <svg class="chev" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+          Done
+        </button>
+        <span class="sec__hint"><b id="done-count">0</b></span>
+        <button id="clear-done" class="quiet-btn" hidden>Clear</button>
+      </div>
+      <ul id="done-list" hidden></ul>
+    </div>
   </div>
-
-  <div class="add-bar">
-    <input id="task-input" placeholder="Add a task…" autocomplete="off" autocapitalize="sentences" enterkeyhint="done" />
-    <button id="add-btn" aria-label="Add">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-    </button>
-  </div>
-  <div id="parse-hint"></div>
-
-  <div class="chip-row" id="chip-row"></div>
-
-  <div class="list" id="pending"></div>
-
-  <div class="empty" id="empty" hidden>
-    <div class="big">Nothing pending.</div>
-    <div class="small">Add something above.</div>
-  </div>
-
-  <div class="block-head" id="done-header" hidden>
-    <span id="done-count"></span><div class="rule"></div><button id="clear-done">Clear</button>
-  </div>
-  <div class="list" id="done"></div>
 </section>
 
 <!-- ============ AGENDA ============ -->
 <section class="view" id="view-agenda" hidden>
-  <header>
-    <div class="head-text">
-      <h1>Agenda</h1>
-      <div class="date-line" id="agenda-sub"></div>
+  <div class="mission-head">
+    <div class="mission-head__row"><h1>Agenda</h1></div>
+    <div class="mission-head__meta">
+      <span class="date-copy"></span>
+      <span id="agenda-free-line" class="free"></span>
     </div>
-  </header>
-  <div class="list" id="agenda-list"></div>
-  <div class="empty" id="agenda-empty" hidden>
-    <div class="big">No meetings today.</div>
-    <div class="small">The whole day is yours.</div>
+  </div>
+  <div class="pane">
+    <div class="sec">
+      <span class="sec__title">Meetings</span>
+      <span class="sec__count" id="agenda-count"></span>
+      <span class="sec__hint" id="agenda-hint"></span>
+    </div>
+    <ul id="agenda-list"></ul>
+    <div class="empty" id="agenda-empty" hidden>
+      <p class="empty-title">No meetings today</p>
+      <p class="empty-sub">The whole day is yours.</p>
+    </div>
   </div>
 </section>
 
 <!-- ============ NOTES ============ -->
 <section class="view" id="view-notes" hidden>
-  <header>
-    <div class="head-text">
-      <h1>Notes</h1>
-      <div class="date-line" id="notes-sub"></div>
+  <div class="mission-head">
+    <div class="mission-head__row"><h1>Notes</h1></div>
+    <div class="mission-head__meta"><span class="date-copy"></span></div>
+  </div>
+  <div class="pane">
+    <div class="sec">
+      <span class="sec__title">Notes</span>
+      <span class="sec__count" id="notes-count"></span>
+      <button id="note-add" class="row-action sec__action">New note</button>
     </div>
-    <button class="head-btn" id="note-add" aria-label="New note">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-    </button>
-  </header>
-  <div class="list" id="note-list"></div>
-  <div class="empty" id="notes-empty" hidden>
-    <div class="big">No notes yet.</div>
-    <div class="small">Tap + to start one.</div>
+    <div class="chips" id="notes-chips"></div>
+    <ul id="note-list"></ul>
+    <p class="empty-sub" id="notes-empty" style="padding:8px" hidden>One card per topic — write everything you want to say about it.</p>
   </div>
 </section>
 
 <!-- ============ INSIGHTS ============ -->
 <section class="view" id="view-insights" hidden>
-  <header>
-    <div class="head-text">
-      <h1>Insights</h1>
-      <div class="date-line" id="insights-sub"></div>
+  <div class="mission-head">
+    <div class="mission-head__row"><h1>Insights</h1></div>
+    <div class="mission-head__meta">
+      <span class="date-copy"></span>
+      <span id="streak-line"></span>
     </div>
-  </header>
-  <div class="stat-grid" id="stat-grid"></div>
-
-  <div class="block-head" id="aging-head" hidden><span>Sitting too long</span><div class="rule"></div></div>
-  <div class="list" id="aging-list"></div>
-
-  <div class="block-head" id="client-head" hidden><span>By client</span><div class="rule"></div></div>
-  <div id="client-list"></div>
+  </div>
+  <div class="pane">
+    <div class="stat-grid" id="stat-grid"></div>
+    <div id="attention-block" hidden>
+      <div class="sec"><span class="sec__title">Needs attention</span></div>
+      <ul id="attention-list"></ul>
+    </div>
+    <div id="aging-block" hidden>
+      <div class="sec"><span class="sec__title">Aging</span><span class="sec__hint">nothing scheduled</span></div>
+      <ul id="aging-list"></ul>
+    </div>
+    <div id="client-block" hidden>
+      <div class="sec"><span class="sec__title">By label</span><span class="sec__hint">done of total</span></div>
+      <ul id="client-list"></ul>
+    </div>
+    <div id="focus-label-block" hidden>
+      <div class="sec"><span class="sec__title">Focus by label</span><span class="sec__hint">7 days</span></div>
+      <ul id="focus-label-list"></ul>
+    </div>
+  </div>
 </section>
 
 <!-- ============ TAB BAR ============ -->
 <nav id="tabbar">
   <button data-tab="today" class="on">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-    <span class="lbl">Today</span>
+    <span class="lbl">Tasks</span>
     <span class="pip" id="pip-today" hidden></span>
   </button>
   <button data-tab="agenda">
@@ -389,18 +702,22 @@ h1 { font-family:var(--serif); font-size:27px; font-weight:600; letter-spacing:-
 </nav>
 
 <div id="backdrop"></div>
-<div id="sheet"></div>
+<div id="sheet" inert></div>
 
 <script>
 /* ============================================================
    miTasks — phone client
    Talks to the widget's sync server. All writes go through the
    Mac so the desktop and phone can never disagree about state.
+   Layout and copy follow the Mac widget (renderer/app.js).
    ============================================================ */
 
 const DAY = 86400000;
 const STALE_DAYS = 3;
-const MIN_GAP = 30 * 60000;
+const AGENDA_GAP_MIN = 30; // shorter gaps aren't worth calling free time
+const FAR_FUTURE = 8.64e15;
+const PRIORITY_RANK = { high: 0, med: 1 };
+const REPEAT_LABEL = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' };
 const WEEKDAYS = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
 const LOCKIN_PRESETS = [25, 45, 60, 90, 120, 180];
 
@@ -423,11 +740,20 @@ const mk = (tag, cls, txt) => {
   if (txt != null) n.textContent = txt;
   return n;
 };
+const dotOf = (color) => {
+  const d = mk('span', 'dot');
+  if (color) d.style.background = color;
+  return d;
+};
+const CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+const X_SVG = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
 
 let state = { tasks: [], labels: [], notes: [], focus: null, events: [], lockin: { active: false }, focusMinutes: 25, focusLog: [] };
-let activeLabel = null;
+let activeLabel = null; // null = All; filters the list AND labels new tasks
+let notesLabel = null;
+let doneOpen = false;
 let tab = 'today';
-let live = false;
+let live = null;
 
 /* Last good snapshot, so a cold launch shows something instantly and an
    unreachable Mac still shows this morning's list instead of a blank page. */
@@ -468,6 +794,7 @@ async function refresh() {
 function adopt(next) {
   state = Object.assign(state, next);
   if (activeLabel && !state.labels.some((l) => l.name === activeLabel)) activeLabel = null;
+  if (notesLabel && !state.labels.some((l) => l.name === notesLabel)) notesLabel = null;
   try { localStorage.setItem('mtstate', JSON.stringify(next)); } catch {}
   render();
 }
@@ -476,6 +803,8 @@ function setLive(on) {
   if (live === on) return;
   live = on;
   el('conn').classList.toggle('on', on);
+  el('conn').classList.toggle('off', !on);
+  el('conn-text').textContent = on ? 'Live' : 'Offline';
   el('stale').hidden = on;
 }
 
@@ -499,46 +828,110 @@ const toDateStr = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.ge
 const toDT = (d) => `${toDateStr(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 function startOfToday() { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); }
 function endOfToday() { const d = new Date(); d.setHours(23, 59, 59, 999); return d.getTime(); }
-function dayDiff(dateStr) {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  return Math.round((new Date(y, m - 1, d).setHours(0, 0, 0, 0) - startOfToday()) / DAY);
-}
-function fmtMin(ms) {
-  const total = Math.max(0, Math.round(ms / 1000));
+const dayDiff = (ts) => Math.floor((ts - startOfToday()) / DAY);
+const longDate = () => new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+const timeOf = (ts) => new Date(ts).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+
+function clock(ms) {
+  const total = Math.max(0, Math.ceil(ms / 1000));
   const h = Math.floor(total / 3600);
   const m = Math.floor((total % 3600) / 60);
   const s = total % 60;
-  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
-}
-function clockLabel(ts) {
-  return new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).replace(/\s/g, '').toLowerCase();
+  return h ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }
 
-/* ---------- Task helpers ---------- */
-const labelFor = (name) => state.labels.find((l) => l.name === name);
+function formatMinutes(ms) {
+  const mins = Math.round(ms / 60000);
+  if (mins < 60) return `${mins}m`;
+  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+}
+
+function formatDue(due) {
+  const ts = Date.parse(due + 'T00:00:00');
+  if (!Number.isFinite(ts)) return null;
+  const diff = dayDiff(ts);
+  const short = new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  if (diff < 0) return { text: `Overdue · ${short}`, cls: 'overdue' };
+  if (diff === 0) return { text: 'Today', cls: 'today' };
+  if (diff === 1) return { text: 'Tomorrow', cls: 'soon' };
+  return { text: short, cls: '' };
+}
+
+function formatStart(startAt) {
+  const ts = Date.parse(startAt);
+  if (!Number.isFinite(ts)) return null;
+  const time = timeOf(ts);
+  const diff = dayDiff(ts);
+  if (ts <= Date.now()) return { text: `Started · ${time}`, cls: 'today' };
+  if (diff === 0) return { text: time, cls: 'soon' };
+  if (diff === 1) return { text: `Tomorrow · ${time}`, cls: '' };
+  const short = new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return { text: `${short} · ${time}`, cls: '' };
+}
+
+function relativeDay(ts) {
+  if (!ts) return '';
+  const diff = dayDiff(ts);
+  if (diff >= 0) return 'Today';
+  if (diff === -1) return 'Yesterday';
+  return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+/* ---------- Task helpers (same rules as the widget) ---------- */
+const labelFor = (name) => state.labels.find((l) => l.name === name) || null;
+const visibleTasks = () => (activeLabel ? state.tasks.filter((t) => t.label === activeLabel) : state.tasks);
 const taskAgeDays = (t) => (t.createdAt ? Math.floor((Date.now() - t.createdAt) / DAY) : 0);
 /* Aging only counts when nothing louder is already flagging the task —
    an overdue date beats "it's been sitting here" as a signal. */
 const isAging = (t) => !t.done && !t.due && !t.startAt && taskAgeDays(t) >= STALE_DAYS;
 const ageClass = (d) => (d >= 14 ? 'hot' : d >= 7 ? 'warm' : '');
 
-function dueChip(t) {
-  if (!t.due) return null;
-  const diff = dayDiff(t.due);
-  const cls = diff < 0 ? 'due-now' : diff === 0 ? 'due-soon' : '';
-  const word = diff < 0 ? (diff === -1 ? 'yesterday' : `${-diff}d late`)
-    : diff === 0 ? 'today'
-    : diff === 1 ? 'tomorrow'
-    : diff < 7 ? `${diff}d`
-    : new Date(t.due + 'T00:00').toLocaleDateString([], { month: 'short', day: 'numeric' });
-  return { text: word, cls };
+function dueValue(t) {
+  if (!t.due) return FAR_FUTURE;
+  const ts = Date.parse(t.due + 'T00:00:00');
+  return Number.isFinite(ts) ? ts : FAR_FUTURE;
 }
 
-function startChip(t) {
-  if (!t.startAt) return null;
-  const d = new Date(t.startAt);
-  if (Number.isNaN(d.getTime())) return null;
-  return { text: clockLabel(d.getTime()), cls: d.getTime() < Date.now() ? 'due-now' : '' };
+/// The line under a task's title, and how loudly it speaks: red is late or
+/// high, amber is today, everything else stays quiet.
+function rowStatus(task) {
+  const bits = [];
+  let tone = '';
+  const raise = (t) => { if (t === 'red' || !tone) tone = t; };
+
+  const start = task.startAt ? formatStart(task.startAt) : null;
+  const due = task.due ? formatDue(task.due) : null;
+  const sameDay = start && task.due && task.startAt.slice(0, 10) === task.due;
+
+  if (due) {
+    bits.push(due.cls === 'today' ? 'Due today' : due.cls === 'soon' ? 'Due tomorrow' : due.cls ? due.text : `Due ${due.text}`);
+    if (due.cls === 'overdue') raise('red');
+    else if (due.cls === 'today') raise('amber');
+  }
+  if (start) {
+    // A start time on the deadline day only needs the time.
+    bits.push(sameDay && start.cls !== 'today' ? timeOf(Date.parse(task.startAt)) : start.text);
+    if (start.cls === 'today') raise('amber');
+  }
+  if (task.priority === 'high') { bits.push('High'); raise('red'); }
+  else if (task.priority === 'med') { bits.push('Medium'); raise('amber'); }
+  if (task.repeat) bits.push(REPEAT_LABEL[task.repeat]);
+  if (isAging(task)) {
+    const days = taskAgeDays(task);
+    bits.push(`${days}d old`);
+    if (ageClass(days) === 'hot') raise('red');
+    else if (ageClass(days) === 'warm') raise('amber');
+  }
+  if (task.focusedMs) bits.push(`${formatMinutes(task.focusedMs)} focused`);
+  return { text: bits.join(' · '), tone };
+}
+
+/// Crew's "Needs you": anything late, due today, already started, or high.
+function needsYou(task) {
+  if (task.priority === 'high') return true;
+  if (task.due && dueValue(task) < startOfToday() + DAY) return true;
+  if (task.startAt && Date.parse(task.startAt) <= endOfToday()) return true;
+  return false;
 }
 
 /* ---------- Quick add ---------- */
@@ -608,11 +1001,11 @@ function renderParseHint() {
   if (!raw) { el('parse-hint').textContent = ''; return; }
   const p = parseQuickAdd(raw);
   const bits = [];
-  if (p.label) bits.push(p.label);
-  if (p.priority) bits.push(p.priority === 'high' ? 'high priority' : 'medium');
-  if (p.startAt) bits.push(clockLabel(new Date(p.startAt).getTime()));
-  else if (p.due) bits.push(dueChip({ due: p.due }).text);
-  if (p.repeat) bits.push(p.repeat);
+  if (p.label && p.label !== activeLabel) bits.push(p.label);
+  if (p.priority) bits.push(p.priority === 'high' ? 'High' : 'Medium');
+  if (p.startAt) bits.push(formatStart(p.startAt).text);
+  else if (p.due) bits.push(formatDue(p.due).text);
+  if (p.repeat) bits.push(REPEAT_LABEL[p.repeat]);
   el('parse-hint').textContent = bits.join(' · ');
 }
 
@@ -634,48 +1027,47 @@ function addFromBar() {
 
 /* ---------- Calendar ---------- */
 const evStart = (e) => Date.parse(e.start);
-const evEnd = (e) => Date.parse(e.end);
+const evEnd = (e) => Date.parse(e.end || e.start);
 
 function todaysEvents() {
-  const s = startOfToday(), e = endOfToday();
+  const from = startOfToday(), to = endOfToday();
   return (state.events || [])
-    .filter((ev) => evEnd(ev) > s && evStart(ev) < e)
-    .sort((a, b) => evStart(a) - evStart(b));
+    .filter((e) => e.status !== 'canceled')
+    .filter((e) => Number.isFinite(evStart(e)) && evStart(e) <= to && evEnd(e) >= from)
+    .sort((a, b) => (a.allDay ? 0 : 1) - (b.allDay ? 0 : 1) || evStart(a) - evStart(b));
 }
 
-/* Merges overlapping meetings before measuring, so a double-booked hour
-   counts once rather than twice. */
-function freeGaps() {
-  const now = Date.now(), end = endOfToday();
-  const busy = todaysEvents()
+/// Total booked milliseconds in [from, to], with overlapping meetings merged
+/// so a double-booked hour is only counted once.
+function busyMs(events, from, to) {
+  const spans = events
     .filter((e) => !e.allDay)
-    .map((e) => [evStart(e), evEnd(e)])
-    .filter(([, b]) => b > now)
-    .map(([a, b]) => [Math.max(a, now), b])
+    .map((e) => [Math.max(evStart(e), from), Math.min(evEnd(e), to)])
+    .filter(([a, b]) => Number.isFinite(a) && Number.isFinite(b) && b > a)
     .sort((a, b) => a[0] - b[0]);
-
-  const merged = [];
-  for (const iv of busy) {
-    const last = merged[merged.length - 1];
-    if (last && iv[0] <= last[1]) last[1] = Math.max(last[1], iv[1]);
-    else merged.push([iv[0], iv[1]]);
+  let total = 0, curStart = null, curEnd = null;
+  for (const [a, b] of spans) {
+    if (curEnd === null || a > curEnd) {
+      if (curEnd !== null) total += curEnd - curStart;
+      curStart = a; curEnd = b;
+    } else if (b > curEnd) {
+      curEnd = b;
+    }
   }
+  if (curEnd !== null) total += curEnd - curStart;
+  return total;
+}
 
-  const gaps = [];
-  let cur = now;
-  for (const [s, e] of merged) {
-    if (s - cur >= MIN_GAP) gaps.push([cur, s]);
-    cur = Math.max(cur, e);
-  }
-  if (end - cur >= MIN_GAP) gaps.push([cur, end]);
-  return gaps;
+function freeToday() {
+  const now = Date.now();
+  return Math.max(0, endOfToday() - now - busyMs(todaysEvents(), now, endOfToday()));
 }
 
 /* ---------- Render ---------- */
 function render() {
-  el('date-line').textContent = new Date()
-    .toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase();
-  renderChips();
+  for (const n of document.querySelectorAll('.date-copy')) n.textContent = longDate();
+  renderHeader();
+  renderScope();
   renderTasks();
   renderFocus();
   renderLockin();
@@ -684,217 +1076,295 @@ function render() {
   if (tab === 'insights') renderInsights();
 }
 
-function renderChips() {
-  const row = el('chip-row');
-  row.innerHTML = '';
-  const all = mk('button', 'chip' + (activeLabel === null ? ' on' : ''), 'All');
-  all.onclick = () => { activeLabel = null; render(); };
-  row.appendChild(all);
+function renderHeader() {
+  el('date-line').textContent = longDate();
+  // Progress follows the label scope, like the widget's panel.
+  const scoped = visibleTasks();
+  const doneN = scoped.filter((t) => t.done).length;
+  const pt = el('progress-text');
+  pt.hidden = scoped.length === 0;
+  const b = mk('b', null, String(doneN));
+  pt.replaceChildren(b, ` of ${scoped.length} done`);
+  // The Mac only sends events once a calendar is connected; without any we
+  // can't honestly claim the day is free.
+  const hasCalendar = (state.events || []).length > 0;
+  el('free-line').hidden = !hasCalendar;
+  if (hasCalendar) el('free-line').textContent = `${formatMinutes(freeToday())} free`;
+}
 
+/// The label scope in the composer. It filters the list and labels new
+/// tasks, the job the chip row used to do.
+function renderScope() {
+  const sel = el('label-select');
+  sel.textContent = '';
+  const add = (value, text) => {
+    const o = mk('option', null, text);
+    o.value = value;
+    sel.appendChild(o);
+  };
+  add('', 'All labels');
   for (const l of state.labels) {
-    const open = state.tasks.filter((t) => !t.done && t.label === l.name).length;
-    const c = mk('button', 'chip' + (activeLabel === l.name ? ' on' : ''));
-    const sw = mk('span', 'swatch');
-    sw.style.background = l.color;
-    c.appendChild(sw);
-    c.appendChild(mk('span', null, open ? `${l.name} ${open}` : l.name));
-    c.onclick = () => { activeLabel = activeLabel === l.name ? null : l.name; render(); };
-    row.appendChild(c);
+    const open = state.tasks.filter((t) => t.label === l.name && !t.done).length;
+    add(l.name, open ? `${l.name}  ${open}` : l.name);
+  }
+  sel.value = activeLabel || '';
+  const lab = labelFor(activeLabel);
+  el('scope-dot').hidden = !lab;
+  if (lab) el('scope-dot').style.background = lab.color;
+  el('scope-text').textContent = lab ? lab.name : 'All labels';
+  el('task-input').placeholder = lab ? `Add to ${lab.name}` : 'Add a task';
+}
+
+function toggleTask(t, row) {
+  const flip = () => push(`/api/tasks/${t.id}/toggle`, 'POST', null, () => {
+    t.done = !t.done;
+    t.doneAt = t.done ? Date.now() : null;
+  });
+  if (!t.done && row) {
+    row.classList.add('completing');
+    setTimeout(flip, 220);
+  } else {
+    flip();
   }
 }
 
-function taskRow(t) {
-  const row = mk('div', 'task' + (t.done ? ' done' : ''));
+function startFocus(taskId) {
+  push('/api/focus', 'POST', { taskId }, () => {
+    const mins = state.focusMinutes || 25;
+    state.focus = { taskId, startedAt: Date.now(), endAt: Date.now() + mins * 60000, minutes: mins };
+  });
+}
 
-  const box = mk('button', 'box' + (t.done ? ' on' : ''));
-  if (t.done) box.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
-  box.onclick = (e) => {
-    e.stopPropagation();
-    push(`/api/tasks/${t.id}/toggle`, 'POST', null, () => {
-      t.done = !t.done;
-      t.doneAt = t.done ? Date.now() : null;
-    });
-  };
-  row.appendChild(box);
+function stopFocus() {
+  push('/api/focus', 'DELETE', null, () => { state.focus = null; });
+}
 
+/// One task, in one of Crew's two row shapes:
+///   'need' — bold title, a coloured status line and a Focus chip on the right;
+///   'line' — a single quiet line with a muted word on the right.
+/// `badge` puts the label's colour on the checkbox, like a teammate's status dot.
+function taskRow(t, variant = 'line', badge = false) {
+  const li = mk('li', `task task--${variant}` + (t.done ? ' done' : ''));
   const main = mk('div', 'task-main');
-  main.appendChild(mk('div', 'task-text', t.text));
 
-  const meta = mk('div', 'meta');
+  const box = mk('button', 'checkbox');
+  box.setAttribute('aria-label', t.done ? 'Mark as not done' : 'Mark as done');
+  box.innerHTML = CHECK_SVG;
+  box.onclick = (e) => { e.stopPropagation(); toggleTask(t, li); };
   const lab = labelFor(t.label);
-  if (lab) {
-    const tag = mk('span', 'tag');
-    const sw = mk('span', 'swatch');
-    sw.style.background = lab.color;
-    tag.appendChild(sw);
-    tag.appendChild(mk('span', null, lab.name));
-    meta.appendChild(tag);
-  }
-  if (t.priority) meta.appendChild(mk('span', `tag pri-${t.priority}`, t.priority === 'high' ? 'HIGH' : 'MED'));
-  const sc = startChip(t);
-  if (sc) meta.appendChild(mk('span', `tag ${sc.cls}`, sc.text));
-  const dc = dueChip(t);
-  if (dc && !sc) meta.appendChild(mk('span', `tag ${dc.cls}`, dc.text));
-  if (t.repeat) meta.appendChild(mk('span', 'tag', t.repeat));
-  if (isAging(t)) {
-    const d = taskAgeDays(t);
-    meta.appendChild(mk('span', `tag ${ageClass(d)}`, `${d}d old`));
-  }
-  if (meta.children.length) main.appendChild(meta);
-  row.appendChild(main);
-
-  if (!t.done) {
-    const play = mk('button', 'play');
-    const running = state.focus && state.focus.taskId === t.id;
-    play.innerHTML = running
-      ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>'
-      : '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20"/></svg>';
-    if (running) play.style.color = 'var(--amber)';
-    play.onclick = (e) => {
-      e.stopPropagation();
-      if (running) push('/api/focus', 'DELETE', null, () => { state.focus = null; });
-      else push('/api/focus', 'POST', { taskId: t.id }, () => {
-        const mins = state.focusMinutes || 25;
-        state.focus = { taskId: t.id, startedAt: Date.now(), endAt: Date.now() + mins * 60000, minutes: mins };
-      });
-    };
-    row.appendChild(play);
+  if (badge && lab) {
+    const d = mk('span', 'checkbox__label');
+    d.style.background = lab.color;
+    box.appendChild(d);
   }
 
-  row.onclick = () => openTaskSheet(t);
-  return row;
+  const body = mk('div', 'task-body');
+  body.appendChild(mk('div', 'task-text', t.text));
+  const status = rowStatus(t);
+  if (variant === 'need' && status.text) {
+    body.appendChild(mk('div', 'task-sub' + (status.tone ? ` tone-${status.tone}` : ''), status.text));
+  }
+  main.append(box, body);
+
+  if (variant === 'line' && !t.done && status.text) {
+    main.appendChild(mk('span', 'task-word' + (status.tone ? ` tone-${status.tone}` : ''), status.text));
+  }
+  if (variant === 'need' && !t.done) {
+    const act = mk('button', 'row-action', 'Focus');
+    act.onclick = (e) => { e.stopPropagation(); startFocus(t.id); };
+    main.appendChild(act);
+  }
+
+  li.appendChild(main);
+  li.onclick = () => openTaskSheet(t);
+  return li;
+}
+
+/// A Crew section head: title, a coloured count, and a quiet hint on the right.
+function sectionHead(title, count, tone, hint) {
+  const li = mk('li', 'sec');
+  li.appendChild(mk('span', 'sec__title', title));
+  if (count) li.appendChild(mk('span', 'sec__count' + (tone ? ` sec__count--${tone}` : ''), String(count)));
+  if (hint) li.appendChild(mk('span', 'sec__hint', hint));
+  return li;
+}
+
+/// A label's group head inside "Up next", like a repo in Crew's mission list.
+function groupHead(lab, name, count) {
+  const li = mk('li', 'group');
+  li.append(dotOf(lab && lab.color), mk('span', 'group__name', name), mk('span', 'group__count', String(count)));
+  return li;
 }
 
 function renderTasks() {
-  const visible = (t) => !activeLabel || t.label === activeLabel;
-  const pending = state.tasks.filter((t) => !t.done && visible(t));
-  const done = state.tasks.filter((t) => t.done && visible(t));
+  const tasks = visibleTasks();
+  const focusId = state.focus ? state.focus.taskId : null;
+  const pending = tasks
+    .filter((t) => !t.done && t.id !== focusId)
+    .sort((a, b) =>
+      (PRIORITY_RANK[a.priority] ?? 2) - (PRIORITY_RANK[b.priority] ?? 2) ||
+      dueValue(a) - dueValue(b) ||
+      (b.createdAt || 0) - (a.createdAt || 0));
+  const done = tasks.filter((t) => t.done).sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0));
 
-  // Same order the widget uses: overdue and timed work first, then priority, then age.
-  const weight = (t) => {
-    let w = 0;
-    if (t.due && dayDiff(t.due) < 0) w -= 1000;
-    if (t.due && dayDiff(t.due) === 0) w -= 500;
-    if (t.startAt) w -= 250;
-    if (t.priority === 'high') w -= 100;
-    else if (t.priority === 'med') w -= 50;
-    return w;
-  };
-  pending.sort((a, b) => weight(a) - weight(b) || (b.createdAt || 0) - (a.createdAt || 0));
-  done.sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0));
+  // Needs you: oldest deadline first, then priority.
+  const needs = pending.filter(needsYou).sort((a, b) =>
+    dueValue(a) - dueValue(b) ||
+    (PRIORITY_RANK[a.priority] ?? 2) - (PRIORITY_RANK[b.priority] ?? 2));
+  const next = pending.filter((t) => !needsYou(t));
 
-  const list = el('pending');
-  list.innerHTML = '';
-  pending.forEach((t) => list.appendChild(taskRow(t)));
-  el('empty').hidden = pending.length > 0;
+  const list = el('pending-list');
+  list.textContent = '';
 
-  const dl = el('done');
-  dl.innerHTML = '';
-  done.slice(0, 40).forEach((t) => dl.appendChild(taskRow(t)));
-  el('done-header').hidden = done.length === 0;
-  el('done-count').textContent = `${done.length} done`;
+  if (needs.length) {
+    list.appendChild(sectionHead('Needs you', needs.length, 'amber', 'most urgent first'));
+    for (const t of needs) list.appendChild(taskRow(t, 'need', !activeLabel));
+  }
 
-  const total = pending.length + done.length;
-  const pct = total ? Math.round((done.length / total) * 100) : 0;
-  el('progress-fill').style.width = pct + '%';
-  el('progress-text').textContent = total ? `${done.length}/${total}` : 'Nothing yet';
-  el('pip-today').hidden = pending.length === 0;
+  if (next.length) {
+    const title = needs.length || focusId ? 'Up next' : 'To do';
+    if (activeLabel) {
+      list.appendChild(sectionHead(title, next.length, '', activeLabel));
+      for (const t of next) list.appendChild(taskRow(t, 'line'));
+    } else {
+      list.appendChild(sectionHead(title, next.length, '', 'by label'));
+      // Group by label, in the order the labels were made; unlabelled last.
+      for (const name of [...state.labels.map((l) => l.name), null]) {
+        const rows = next.filter((t) => (t.label || null) === name || (name === null && t.label && !labelFor(t.label)));
+        if (!rows.length) continue;
+        list.appendChild(groupHead(labelFor(name), name || 'No label', rows.length));
+        for (const t of rows) list.appendChild(taskRow(t, 'line'));
+      }
+    }
+  }
+
+  const dl = el('done-list');
+  dl.textContent = '';
+  for (const t of done.slice(0, 40)) dl.appendChild(taskRow(t, 'line'));
+  el('done-block').hidden = done.length === 0;
+  el('done-block').classList.toggle('open', doneOpen);
+  dl.hidden = !doneOpen;
+  el('clear-done').hidden = !doneOpen;
+  el('done-count').textContent = String(done.length);
+  el('empty').hidden = !(pending.length === 0 && done.length === 0 && !focusId);
+
+  el('pip-today').hidden = state.tasks.filter((t) => !t.done && needsYou(t)).length === 0;
 }
 
 function renderFocus() {
   const f = state.focus;
-  const strip = el('focus-strip');
-  if (!f) { strip.hidden = true; return; }
-  const task = state.tasks.find((t) => t.id === f.taskId);
-  strip.hidden = false;
-  el('focus-task').textContent = task ? task.text : 'Focus';
-  el('focus-time').textContent = fmtMin(f.endAt - Date.now());
+  const task = f && state.tasks.find((t) => t.id === f.taskId);
+  // A focus on a task outside the label scope stays out of this list too.
+  const show = !!(task && (!activeLabel || task.label === activeLabel));
+  el('focus-block').hidden = !show;
+  if (!show) return;
+  el('focus-task').textContent = task.text;
+  const sub = [];
+  if (task.priority) sub.push(task.priority === 'high' ? 'High' : 'Medium');
+  if (task.label) sub.push(task.label);
+  sub.push(task.focusedMs ? `${formatMinutes(task.focusedMs)} before this` : 'First session');
+  el('focus-sub').textContent = sub.join(' · ');
+  el('focus-time').textContent = clock(f.endAt - Date.now());
 }
 
+/// Lock-in is a pill switch in the header, like Crew's Auto-approve.
 function renderLockin() {
   const l = state.lockin || { active: false };
-  const strip = el('lockin-strip');
-  strip.hidden = !l.active;
-  el('lockin-btn').classList.toggle('active', !!l.active);
-  if (l.active) el('lockin-time').textContent = fmtMin(l.endAt - Date.now());
+  const active = !!l.active && l.endAt > Date.now();
+  el('lockin-btn').classList.toggle('pill--on', active);
+  el('lockin-plus').hidden = !active;
+  el('lockin-label').textContent = !active ? 'Lock in' : l.reason === 'focus' ? 'Awake' : 'Locked in';
+  el('lockin-time').textContent = active ? clock(l.endAt - Date.now()) : '';
+}
+
+function agendaRow(ev, now) {
+  const isLive = !ev.allDay && evStart(ev) <= now && evEnd(ev) > now;
+  const past = !ev.allDay && evEnd(ev) <= now;
+  const li = mk('li', 'agenda-item' + (isLive ? ' now' : '') + (past ? ' past' : ''));
+  const rail = mk('span', 'agenda-rail');
+  if (ev.color && !isLive) rail.style.background = ev.color;
+  const time = mk('span', 'agenda-time', ev.allDay ? 'All day' : timeOf(evStart(ev)));
+  const body = mk('div', 'agenda-body');
+  body.appendChild(mk('div', 'agenda-name', ev.title || 'Untitled'));
+  // One line of context, in order of how much it tells you.
+  const bits = [];
+  if (isLive) bits.push('Now');
+  const people = ev.attendeeCount || (Array.isArray(ev.attendees) ? ev.attendees.length : 0);
+  if (ev.location) bits.push(ev.location);
+  else if (people) bits.push(`${people} people`);
+  else if (ev.calendar) bits.push(ev.calendar);
+  if (bits.length) body.appendChild(mk('div', 'agenda-sub', bits.join(' · ')));
+  li.append(rail, time, body);
+  return li;
 }
 
 function renderAgenda() {
+  const now = Date.now();
   const events = todaysEvents();
-  const list = el('agenda-list');
-  list.innerHTML = '';
+  const free = freeToday();
+  const left = events.filter((e) => !e.allDay && evEnd(e) > now).length;
+  const liveN = events.filter((e) => !e.allDay && evStart(e) <= now && evEnd(e) > now).length;
+
+  const count = el('agenda-count');
+  count.textContent = liveN ? `${liveN} now` : left ? String(left) : '';
+  count.className = 'sec__count' + (liveN ? ' sec__count--amber' : '');
+  el('agenda-hint').textContent = events.length
+    ? (left ? `${left} to go · ` : '') + `${formatMinutes(free)} free`
+    : 'Nothing booked today';
+  el('agenda-free-line').hidden = !events.length;
+  el('agenda-free-line').textContent = `${formatMinutes(free)} free`;
   el('agenda-empty').hidden = events.length > 0;
 
-  // With nothing on the calendar the empty state already says the day is open —
-  // a "4.7h free" row underneath it just repeats itself.
-  const gaps = events.length ? freeGaps() : [];
-  const freeMs = gaps.reduce((s, [a, b]) => s + (b - a), 0);
-  const upcoming = events.filter((e) => evEnd(e) > Date.now()).length;
-  el('agenda-sub').textContent = events.length
-    ? `${upcoming} LEFT · ${Math.round(freeMs / 3600000 * 10) / 10}H FREE`
-    : new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase();
-
-  const now = Date.now();
-  let gi = 0;
+  const list = el('agenda-list');
+  list.textContent = '';
+  let prevEnd = null;
   for (const ev of events) {
-    // Drop in any free stretch that ends before this meeting starts.
-    while (gi < gaps.length && gaps[gi][1] <= evStart(ev)) {
-      addGap(list, gaps[gi]);
-      gi++;
+    if (!ev.allDay && prevEnd !== null) {
+      const gap = evStart(ev) - prevEnd;
+      if (gap >= AGENDA_GAP_MIN * 60000) list.appendChild(mk('li', 'agenda-gap', `${formatMinutes(gap)} open`));
     }
-    const isNow = evStart(ev) <= now && evEnd(ev) > now;
-    const row = mk('div', 'event' + (isNow ? ' now' : ''));
-    row.appendChild(mk('div', 'rail')).style.background = isNow ? '' : (ev.color || '');
-    const main = mk('div', 'event-main');
-    main.appendChild(mk('div', 'event-time',
-      ev.allDay ? 'ALL DAY' : `${clockLabel(evStart(ev))} – ${clockLabel(evEnd(ev))}${isNow ? '  · NOW' : ''}`));
-    main.appendChild(mk('div', 'event-title', ev.title || 'Untitled'));
-    const bits = [];
-    if (ev.location) bits.push(ev.location);
-    if (ev.attendees && ev.attendees.length) bits.push(`${ev.attendees.length} people`);
-    if (bits.length) main.appendChild(mk('div', 'event-meta', bits.join(' · ')));
-    row.appendChild(main);
-    list.appendChild(row);
+    list.appendChild(agendaRow(ev, now));
+    if (!ev.allDay) prevEnd = Math.max(prevEnd ?? 0, evEnd(ev));
   }
-  while (gi < gaps.length) { addGap(list, gaps[gi]); gi++; }
-}
-
-function addGap(list, [a, b]) {
-  const g = mk('div', 'gap');
-  g.appendChild(mk('span', 'line'));
-  const mins = Math.round((b - a) / 60000);
-  const label = mins >= 60 ? `${Math.round(mins / 6) / 10}h open` : `${mins}m open`;
-  g.appendChild(mk('span', null, `${label} · ${clockLabel(a)}`));
-  list.appendChild(g);
 }
 
 function renderNotes() {
-  const notes = (state.notes || []).slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-  const list = el('note-list');
-  list.innerHTML = '';
-  el('notes-empty').hidden = notes.length > 0;
-  el('notes-sub').textContent = `${notes.length} NOTE${notes.length === 1 ? '' : 'S'}`;
+  const chips = el('notes-chips');
+  chips.textContent = '';
+  const chip = (name, color, value) => {
+    const c = mk('button', 'chip' + (notesLabel === value ? ' active' : ''));
+    if (color) c.appendChild(dotOf(color));
+    c.appendChild(document.createTextNode(name));
+    c.onclick = () => { notesLabel = value; renderNotes(); };
+    chips.appendChild(c);
+  };
+  chip('All', null, null);
+  for (const l of state.labels) chip(l.name, l.color, l.name);
+  chips.hidden = state.labels.length === 0;
 
+  const notes = (state.notes || [])
+    .filter((n) => (notesLabel ? n.label === notesLabel : true))
+    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  el('notes-count').textContent = notes.length ? String(notes.length) : '';
+  el('notes-empty').hidden = notes.length > 0;
+
+  const list = el('note-list');
+  list.textContent = '';
   for (const n of notes) {
-    const row = mk('div', 'note');
-    row.appendChild(mk('div', 'note-title', n.title || 'Untitled'));
-    if (n.body) row.appendChild(mk('div', 'note-prev', n.body.slice(0, 160)));
-    const meta = mk('div', 'meta');
+    const li = mk('li', 'note-card');
+    li.appendChild(mk('p', 'note-title', (n.title || '').trim() || 'Untitled'));
+    const body = (n.body || '').trim();
+    if (body) li.appendChild(mk('p', 'note-preview', body.slice(0, 240)));
+    const meta = mk('p', 'note-meta');
     const lab = labelFor(n.label);
-    if (lab) {
-      const tag = mk('span', 'tag');
-      const sw = mk('span', 'swatch');
-      sw.style.background = lab.color;
-      tag.appendChild(sw);
-      tag.appendChild(mk('span', null, lab.name));
-      meta.appendChild(tag);
+    if (lab && !notesLabel) {
+      meta.appendChild(dotOf(lab.color));
+      meta.appendChild(document.createTextNode(lab.name + '  ·  '));
     }
-    if (n.updatedAt) {
-      meta.appendChild(mk('span', 'tag', new Date(n.updatedAt).toLocaleDateString([], { month: 'short', day: 'numeric' })));
-    }
-    if (meta.children.length) row.appendChild(meta);
-    row.onclick = () => openNoteSheet(n);
-    list.appendChild(row);
+    meta.appendChild(document.createTextNode(relativeDay(n.updatedAt)));
+    li.appendChild(meta);
+    li.onclick = () => openNoteSheet(n);
+    list.appendChild(li);
   }
 }
 
@@ -910,110 +1380,186 @@ function streakDays() {
   return n;
 }
 
-function renderInsights() {
-  const today = toDateStr(new Date());
-  const doneToday = state.tasks.filter((t) => t.done && t.doneAt && toDateStr(new Date(t.doneAt)) === today).length;
-  const open = state.tasks.filter((t) => !t.done).length;
-  const focusToday = (state.focusLog || [])
-    .filter((f) => f.date === today)
-    .reduce((s, f) => s + (f.ms || 0), 0);
+function attentionItem(textNode, why, whyCls, onTap) {
+  const li = mk('li', 'attention-item' + (onTap ? ' tap' : ''));
+  const text = mk('span', 'attention-text');
+  if (Array.isArray(textNode)) text.append(...textNode); else text.append(textNode);
+  li.append(text, mk('span', 'attention-why' + (whyCls ? ` ${whyCls}` : ''), why));
+  if (onTap) li.onclick = onTap;
+  return li;
+}
 
-  el('insights-sub').textContent = new Date()
-    .toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase();
+function renderInsights() {
+  const today = startOfToday();
+  const now = Date.now();
+  const tStr = toDateStr(new Date());
+  const doneTasks = state.tasks.filter((t) => t.done);
+  const overdue = state.tasks.filter((t) => !t.done && t.due && dueValue(t) < today);
+  const stalled = state.tasks.filter(
+    (t) => !t.done && t.startAt && Date.parse(t.startAt) <= now && !(t.due && dueValue(t) < today)
+  );
+
+  let focusToday = 0, focusWeek = 0;
+  const focusByLabel = {};
+  const weekCut = now - 7 * DAY;
+  for (const f of state.focusLog || []) {
+    const ts = Date.parse(f.date + 'T00:00:00');
+    if (f.date === tStr) focusToday += f.ms || 0;
+    if (Number.isFinite(ts) && ts >= weekCut - DAY) {
+      focusWeek += f.ms || 0;
+      const label = f.label !== undefined ? f.label : (state.tasks.find((t) => t.id === f.taskId) || {}).label ?? null;
+      const key = label || 'No label';
+      focusByLabel[key] = (focusByLabel[key] || 0) + (f.ms || 0);
+    }
+  }
+
+  const streak = streakDays();
+  el('streak-line').textContent = streak ? `${streak}-day streak` : '';
 
   const stats = [
-    { n: String(doneToday), k: 'Done today' },
-    { n: String(open), k: 'Still open' },
-    { n: Math.round(focusToday / 60000) + '<small>m</small>', k: 'Focused today' },
-    { n: String(streakDays()) + '<small>d</small>', k: 'Streak' },
+    ['Done today', doneTasks.filter((t) => (t.doneAt || 0) >= today).length],
+    ['Past 7 days', doneTasks.filter((t) => (t.doneAt || 0) >= now - 7 * DAY).length],
+    ['Pending', state.tasks.filter((t) => !t.done).length],
+    ['Overdue', overdue.length, overdue.length ? 'stat-warn' : ''],
+    ['Focused today', formatMinutes(focusToday)],
+    ['Focused 7 days', formatMinutes(focusWeek)],
   ];
   const grid = el('stat-grid');
-  grid.innerHTML = '';
-  for (const s of stats) {
-    const c = mk('div', 'stat');
-    const n = mk('div', 'n');
-    n.innerHTML = s.n;
-    c.appendChild(n);
-    c.appendChild(mk('div', 'k', s.k));
+  grid.textContent = '';
+  for (const [k, n, cls] of stats) {
+    const c = mk('div', 'stat' + (cls ? ` ${cls}` : ''));
+    c.append(mk('span', null, k), mk('b', null, String(n)));
     grid.appendChild(c);
   }
 
-  const aging = state.tasks.filter(isAging).sort((a, b) => taskAgeDays(b) - taskAgeDays(a)).slice(0, 8);
-  el('aging-head').hidden = aging.length === 0;
+  const attention = [
+    ...overdue.map((t) => ({ t, why: 'Overdue' })),
+    ...stalled.map((t) => ({ t, why: 'Started' })),
+  ];
+  el('attention-block').hidden = attention.length === 0;
+  const atl = el('attention-list');
+  atl.textContent = '';
+  for (const { t, why } of attention.slice(0, 8)) {
+    atl.appendChild(attentionItem(mk('span', null, t.text), why, why === 'Overdue' ? 'overdue' : '', () => openTaskSheet(t)));
+  }
+
+  const aging = state.tasks.filter(isAging).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+  el('aging-block').hidden = aging.length === 0;
   const al = el('aging-list');
-  al.innerHTML = '';
-  aging.forEach((t) => al.appendChild(taskRow(t)));
+  al.textContent = '';
+  for (const t of aging.slice(0, 8)) {
+    const d = taskAgeDays(t);
+    al.appendChild(attentionItem(mk('span', null, t.text), `${d}d`, ageClass(d) === 'hot' ? 'overdue' : '', () => openTaskSheet(t)));
+  }
 
-  const rows = state.labels.map((l) => {
-    const all = state.tasks.filter((t) => t.label === l.name);
-    const openN = all.filter((t) => !t.done).length;
-    const doneN = all.filter((t) => t.done).length;
-    const last = Math.max(0, ...all.map((t) => t.doneAt || t.createdAt || 0));
-    return { l, openN, doneN, total: all.length, quiet: last ? Math.floor((Date.now() - last) / DAY) : null };
-  }).filter((r) => r.total > 0)
-    .sort((a, b) => b.openN - a.openN || (b.quiet || 0) - (a.quiet || 0));
+  // By label: buckets with open work first, oldest activity at the top — the
+  // point is spotting the client that has gone quiet.
+  const buckets = new Map();
+  for (const t of state.tasks) {
+    const key = labelFor(t.label) ? t.label : null;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(t);
+  }
+  const rows = [...buckets].map(([name, ts]) => {
+    const doneN = ts.filter((t) => t.done).length;
+    const touched = ts.map((t) => t.doneAt || t.createdAt || 0);
+    return { name, total: ts.length, done: doneN, open: ts.length - doneN, last: touched.length ? Math.max(...touched) : 0 };
+  }).sort((a, b) => (b.open ? 1 : 0) - (a.open ? 1 : 0) || a.last - b.last);
 
-  el('client-head').hidden = rows.length === 0;
+  el('client-block').hidden = rows.length === 0;
   const cl = el('client-list');
-  cl.innerHTML = '';
+  cl.textContent = '';
   for (const r of rows) {
-    const c = mk('div', 'client');
-    const top = mk('div', 'client-top');
-    const name = mk('div', 'client-name');
-    const sw = mk('span', 'swatch');
-    sw.style.background = r.l.color;
-    name.appendChild(sw);
-    name.appendChild(mk('span', null, r.l.name));
-    top.appendChild(name);
-    top.appendChild(mk('div', 'client-count', `${r.doneN}/${r.total}`));
-    c.appendChild(top);
-    const bar = mk('div', 'bar');
-    const fill = mk('span');
-    fill.style.width = (r.total ? (r.doneN / r.total) * 100 : 0) + '%';
-    fill.style.background = r.l.color;
-    bar.appendChild(fill);
-    c.appendChild(bar);
-    if (r.quiet != null && r.quiet >= 7 && r.openN > 0) {
-      c.appendChild(mk('div', 'quiet', `Quiet ${r.quiet} days — ${r.openN} still open`));
+    const lab = labelFor(r.name);
+    const li = mk('li', 'client-row');
+    const name = mk('span', 'client-name');
+    if (lab) name.appendChild(dotOf(lab.color));
+    name.appendChild(mk('span', null, r.name || 'No label'));
+    const track = mk('div', 'client-track');
+    const fill = mk('div', 'client-fill');
+    fill.style.width = (r.total ? (r.done / r.total) * 100 : 0) + '%';
+    fill.style.background = lab ? lab.color : 'var(--faint)';
+    track.appendChild(fill);
+    const quietDays = r.last ? Math.floor((now - r.last) / DAY) : 0;
+    const meta = mk('span', 'client-meta');
+    if (r.open) {
+      meta.textContent = quietDays >= 7 ? `${r.open} open · ${quietDays}d` : `${r.open} open`;
+      if (quietDays >= 7) meta.classList.add('quiet');
+    } else {
+      meta.textContent = `${r.done}/${r.total}`;
     }
-    cl.appendChild(c);
+    li.append(name, track, meta);
+    cl.appendChild(li);
+  }
+
+  const entries = Object.entries(focusByLabel).sort((a, b) => b[1] - a[1]);
+  el('focus-label-block').hidden = entries.length === 0;
+  const fl = el('focus-label-list');
+  fl.textContent = '';
+  for (const [name, ms] of entries.slice(0, 6)) {
+    const lab = labelFor(name);
+    const parts = lab ? [dotOf(lab.color), mk('span', null, name)] : [mk('span', null, name)];
+    fl.appendChild(attentionItem(parts, formatMinutes(ms), 'quiet'));
   }
 }
 
 /* ---------- Sheets ---------- */
 function closeSheet() {
   el('sheet').classList.remove('on');
+  el('sheet').inert = true;
   el('backdrop').classList.remove('on');
 }
 function openSheet(build) {
   const sheet = el('sheet');
   sheet.innerHTML = '';
+  sheet.scrollTop = 0;
   sheet.appendChild(mk('div', 'grab'));
   build(sheet);
+  sheet.inert = false;
   sheet.classList.add('on');
   el('backdrop').classList.add('on');
 }
 
-function field(parent, label, node) {
-  const f = mk('div', 'field');
-  f.appendChild(mk('div', 'field-k', label));
-  f.appendChild(node);
-  parent.appendChild(f);
-  return node;
+function detailRow(parent, label, ...controls) {
+  const row = mk('div', 'detail-row');
+  row.appendChild(mk('span', 'detail-label', label));
+  for (const c of controls) row.appendChild(c);
+  parent.appendChild(row);
+  return row;
 }
 
-function segmented(options, current, onPick) {
+function segControl(options, current, onPick) {
   const wrap = mk('div', 'seg');
-  for (const [val, label] of options) {
-    const b = mk('button', current === val ? 'on' : '', label);
+  for (const [text, value, cls] of options) {
+    const b = mk('button', 'seg-btn' + (current === value ? ' active' : '') + (cls ? ` ${cls}` : ''), text);
     b.onclick = () => {
-      onPick(val);
-      [...wrap.children].forEach((c) => c.classList.remove('on'));
-      b.classList.add('on');
+      onPick(value);
+      for (const c of wrap.children) c.classList.remove('active');
+      b.classList.add('active');
     };
     wrap.appendChild(b);
   }
   return wrap;
+}
+
+function sheetHead(s, title, sub) {
+  const head = mk('div', 'sheet-head');
+  head.appendChild(mk('div', 'sheet-title', title));
+  if (sub) head.appendChild(mk('span', 'sheet-sub', sub));
+  s.appendChild(head);
+}
+
+function dateField(type, value, onChange) {
+  const input = mk('input');
+  input.type = type;
+  input.value = value || '';
+  const clear = mk('button', 'clear-due');
+  clear.setAttribute('aria-label', 'Clear');
+  clear.innerHTML = X_SVG;
+  clear.hidden = !input.value;
+  input.oninput = () => { onChange(input.value); clear.hidden = !input.value; };
+  clear.onclick = () => { input.value = ''; onChange(''); clear.hidden = true; };
+  return [input, clear];
 }
 
 function openTaskSheet(t) {
@@ -1021,45 +1567,73 @@ function openTaskSheet(t) {
     text: t.text, notes: t.notes || '', priority: t.priority || null,
     label: t.label || null, due: t.due || '', startAt: t.startAt || '', repeat: t.repeat || null,
   };
+  const original = JSON.stringify(draft);
+  const saveDraft = () => {
+    if (!draft.text.trim()) draft.text = t.text;
+    if (JSON.stringify(draft) === original) return;
+    push(`/api/tasks/${t.id}`, 'PATCH', draft, () => Object.assign(t, draft, {
+      due: draft.due || null, startAt: draft.startAt || null,
+    }));
+  };
 
   openSheet((s) => {
-    s.appendChild(mk('div', 'sheet-title', 'Edit task'));
+    sheetHead(s, t.done ? 'Done' : 'Task', rowStatus(t).text);
 
-    const text = field(s, 'Task', mk('input'));
-    text.value = draft.text;
-    text.oninput = () => { draft.text = text.value; };
+    const title = mk('input', 'detail-title');
+    title.value = draft.text;
+    title.maxLength = 300;
+    title.oninput = () => { draft.text = title.value; };
+    s.appendChild(title);
 
-    field(s, 'Priority', segmented(
-      [[null, 'None'], ['med', 'Medium'], ['high', 'High']],
+    const chips = mk('div', 'detail-chips');
+    const labelChip = (name, color, value) => {
+      const c = mk('button', 'chip' + (draft.label === value ? ' active' : ''));
+      if (color) c.appendChild(dotOf(color));
+      c.appendChild(document.createTextNode(name));
+      c.onclick = () => {
+        draft.label = value;
+        for (const x of chips.children) x.classList.remove('active');
+        c.classList.add('active');
+      };
+      chips.appendChild(c);
+    };
+    labelChip('None', null, null);
+    for (const l of state.labels) labelChip(l.name, l.color, l.name);
+    detailRow(s, 'Label', chips);
+
+    if (!t.done) {
+      const running = state.focus && state.focus.taskId === t.id;
+      const fb = mk('button', 'row-action' + (running ? ' danger' : ''),
+        running ? 'Stop session' : `Focus · ${state.focusMinutes || 25} min`);
+      fb.onclick = () => {
+        closeSheet();
+        saveDraft();
+        if (running) stopFocus(); else startFocus(t.id);
+      };
+      detailRow(s, 'Focus', fb);
+    }
+
+    detailRow(s, 'Priority', segControl(
+      [['None', null], ['Medium', 'med', 'seg-med'], ['High', 'high', 'seg-high']],
       draft.priority, (v) => { draft.priority = v; }
     ));
 
-    field(s, 'Label', segmented(
-      [[null, 'None'], ...state.labels.map((l) => [l.name, l.name])],
-      draft.label, (v) => { draft.label = v; }
-    ));
-
-    const due = field(s, 'Due date', mk('input'));
-    due.type = 'date';
-    due.value = draft.due;
-    due.oninput = () => { draft.due = due.value; };
-
-    const start = field(s, 'Start time', mk('input'));
-    start.type = 'datetime-local';
-    start.value = draft.startAt;
-    start.oninput = () => { draft.startAt = start.value; };
-
-    field(s, 'Repeat', segmented(
-      [[null, 'Never'], ['daily', 'Daily'], ['weekly', 'Weekly'], ['monthly', 'Monthly']],
+    detailRow(s, 'Repeat', segControl(
+      [['Off', null], ['Daily', 'daily'], ['Weekly', 'weekly'], ['Monthly', 'monthly']],
       draft.repeat, (v) => { draft.repeat = v; }
     ));
 
-    const notes = field(s, 'Notes', mk('textarea'));
+    detailRow(s, 'Starts', ...dateField('datetime-local', draft.startAt, (v) => { draft.startAt = v; }));
+    detailRow(s, 'Deadline', ...dateField('date', draft.due, (v) => { draft.due = v; }));
+
+    const notes = mk('textarea');
+    notes.placeholder = 'Add notes…';
     notes.value = draft.notes;
     notes.oninput = () => { draft.notes = notes.value; };
+    s.appendChild(notes);
 
     const acts = mk('div', 'sheet-acts');
-    const del = mk('button', 'btn-danger', 'Delete');
+    const del = mk('button', 'row-action danger', 'Delete');
     del.onclick = () => {
       closeSheet();
       push(`/api/tasks/${t.id}`, 'DELETE', null, () => {
@@ -1067,12 +1641,8 @@ function openTaskSheet(t) {
       });
     };
     const save = mk('button', 'btn-primary', 'Save');
-    save.onclick = () => {
-      closeSheet();
-      push(`/api/tasks/${t.id}`, 'PATCH', draft, () => Object.assign(t, draft));
-    };
-    acts.appendChild(del);
-    acts.appendChild(save);
+    save.onclick = () => { closeSheet(); saveDraft(); };
+    acts.append(del, mk('span', 'spacer'), save);
     s.appendChild(acts);
   });
 }
@@ -1080,19 +1650,24 @@ function openTaskSheet(t) {
 function openNoteSheet(n) {
   const draft = { title: n.title || '', body: n.body || '' };
   openSheet((s) => {
-    s.appendChild(mk('div', 'sheet-title', 'Note'));
+    const lab = labelFor(n.label);
+    sheetHead(s, 'Note', [lab && lab.name, relativeDay(n.updatedAt)].filter(Boolean).join(' · '));
 
-    const title = field(s, 'Title', mk('input'));
+    const title = mk('input', 'detail-title');
+    title.placeholder = 'Title';
     title.value = draft.title;
     title.oninput = () => { draft.title = title.value; };
+    s.appendChild(title);
 
-    const body = field(s, 'Body', mk('textarea'));
-    body.style.minHeight = '180px';
+    const body = mk('textarea');
+    body.placeholder = 'Everything you want to say about it…';
+    body.style.minHeight = '200px';
     body.value = draft.body;
     body.oninput = () => { draft.body = body.value; };
+    s.appendChild(body);
 
     const acts = mk('div', 'sheet-acts');
-    const del = mk('button', 'btn-danger', 'Delete');
+    const del = mk('button', 'row-action danger', 'Delete');
     del.onclick = () => {
       closeSheet();
       push(`/api/notes/${n.id}`, 'DELETE', null, () => {
@@ -1104,45 +1679,45 @@ function openNoteSheet(n) {
       closeSheet();
       push(`/api/notes/${n.id}`, 'PATCH', draft, () => Object.assign(n, draft, { updatedAt: Date.now() }));
     };
-    acts.appendChild(del);
-    acts.appendChild(save);
+    acts.append(del, mk('span', 'spacer'), save);
     s.appendChild(acts);
   });
 }
 
 function openLockinSheet() {
   openSheet((s) => {
-    const active = state.lockin && state.lockin.active;
-    s.appendChild(mk('div', 'sheet-title', active ? 'Locked in' : 'Lock in'));
+    const l = state.lockin || {};
+    const active = !!l.active && l.endAt > Date.now();
+    sheetHead(s, active ? 'Locked in' : 'Lock in', active ? `${clock(l.endAt - Date.now())} left` : '');
+    s.appendChild(mk('p', 'sheet-note', active ? 'Replace it with' : 'Keep your Mac awake for'));
 
-    const grid = mk('div', 'time-grid');
+    const grid = mk('div', 'lockin-opts');
     for (const m of LOCKIN_PRESETS) {
       const label = m < 60 ? `${m}m` : m % 60 === 0 ? `${m / 60}h` : `${Math.floor(m / 60)}½h`;
       const b = mk('button', null, label);
       b.onclick = () => { closeSheet(); startLockin(m); };
       grid.appendChild(b);
     }
-    field(s, active ? 'Replace with' : 'Keep awake for', grid);
+    s.appendChild(grid);
 
-    const row = mk('div', 'custom-row');
-    const input = mk('input');
+    const row = mk('div', 'lockin-custom');
+    const input = mk('input', 'field-input');
     input.type = 'number';
     input.min = '1';
     input.max = '480';
-    input.placeholder = 'Minutes';
+    input.placeholder = 'minutes';
     input.inputMode = 'numeric';
-    const go = mk('button', null, 'Start');
+    const go = mk('button', 'btn-primary', 'Start');
     go.onclick = () => {
       const m = Number(input.value);
       if (m > 0) { closeSheet(); startLockin(m); }
     };
-    row.appendChild(input);
-    row.appendChild(go);
+    row.append(input, go);
     s.appendChild(row);
 
     if (active) {
       const acts = mk('div', 'sheet-acts');
-      const stop = mk('button', 'btn-ghost', 'Stop lock-in');
+      const stop = mk('button', 'row-action danger', 'Stop lock-in');
       stop.onclick = () => { closeSheet(); stopLockin(); };
       acts.appendChild(stop);
       s.appendChild(acts);
@@ -1182,18 +1757,27 @@ el('task-input').addEventListener('input', renderParseHint);
 el('task-input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); addFromBar(); el('task-input').blur(); }
 });
+el('label-select').onchange = (e) => {
+  activeLabel = e.target.value || null;
+  renderParseHint();
+  render();
+};
 
+el('done-toggle').onclick = () => { doneOpen = !doneOpen; renderTasks(); };
 el('clear-done').onclick = () => push('/api/clear-done', 'POST', null, () => {
   state.tasks = state.tasks.filter((t) => !t.done);
 });
 
-el('focus-stop').onclick = () => push('/api/focus', 'DELETE', null, () => { state.focus = null; });
+el('focus-stop').onclick = (e) => { e.stopPropagation(); stopFocus(); };
+el('focus-row').onclick = () => {
+  const task = state.focus && state.tasks.find((t) => t.id === state.focus.taskId);
+  if (task) openTaskSheet(task);
+};
 el('lockin-btn').onclick = openLockinSheet;
-el('lockin-stop').onclick = stopLockin;
 el('lockin-plus').onclick = () => startLockin(15, true);
 el('note-add').onclick = async () => {
   try {
-    const res = await api('/api/notes', 'POST', { title: 'Untitled', label: activeLabel });
+    const res = await api('/api/notes', 'POST', { title: 'Untitled', label: notesLabel || activeLabel });
     await refresh();
     const note = (state.notes || []).find((n) => n.id === res.id);
     if (note) openNoteSheet(note);

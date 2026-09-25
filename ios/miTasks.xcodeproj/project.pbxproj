@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXFileReference section */
+		A1000000000000000000E1 /* miTasks.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = miTasks.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		A1000000000000000000B1 /* miTasks */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
@@ -120,10 +124,6 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
-/* Begin PBXFileReference section */
-		A1000000000000000000E1 /* miTasks.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = miTasks.app; sourceTree = BUILT_PRODUCTS_DIR; };
-/* End PBXFileReference section */
-
 /* Begin XCBuildConfiguration section */
 		A100000000000000000201 /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -188,11 +188,14 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = BNW5XQKM2F;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking = YES;
-				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "miTasks talks to the widget running on your Mac over your local network.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Scanning the pairing code from the miTasks widget on your Mac.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "miTasks talks to the widget running on your Mac over your local network.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "miTasks listens when you tap the mic button, so you can speak a task instead of typing it.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "miTasks turns what you say into a task. Speech is recognised on this iPhone; the audio is never uploaded.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleLightContent;
@@ -219,11 +222,14 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = BNW5XQKM2F;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking = YES;
-				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "miTasks talks to the widget running on your Mac over your local network.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Scanning the pairing code from the miTasks widget on your Mac.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "miTasks talks to the widget running on your Mac over your local network.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "miTasks listens when you tap the mic button, so you can speak a task instead of typing it.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "miTasks turns what you say into a task. Speech is recognised on this iPhone; the audio is never uploaded.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleLightContent;

@@ -4,7 +4,7 @@
 // runs — the app's real offline story is the last-state snapshot it keeps in
 // localStorage. This is here for when the page is reached over localhost or a
 // TLS tunnel, where it makes a cold launch instant.
-const CACHE = 'mitasks-shell-v1';
+const CACHE = 'mitasks-shell-v2';
 const SHELL = ['/', '/icon.png', '/manifest.webmanifest'];
 
 self.addEventListener('install', (e) => {

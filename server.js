@@ -1,6 +1,7 @@
 // Embedded sync server: serves the iPhone web app and a small JSON API
 // backed by the same task state the widget uses.
 const http = require('http');
+const jev = require('./jev');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -318,6 +319,20 @@ function startSyncServer({ port, token, getState, commit, getCalendar, lockin })
       commit(state);
       broadcast();
       sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    // Voice capture: clients transcribe on-device, then ask Jev what the
+    // sentence actually was. Date parsing stays client-side, where quick-add
+    // already handles "tomorrow at 3pm".
+    if (p === '/api/classify' && req.method === 'POST') {
+      const body = await readBody(req);
+      const state = getState();
+      const result = await jev.classify(body.transcript, {
+        key: (state.settings || {}).jevKey,
+        labels: state.labels || [],
+      });
+      sendJson(res, 200, result);
       return;
     }
 

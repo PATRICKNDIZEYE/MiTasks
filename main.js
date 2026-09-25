@@ -8,6 +8,8 @@ let QRCode = null;
 try { QRCode = require('qrcode'); } catch { /* pairing falls back to the copyable URL */ }
 const calendar = require('./calendar');
 const lockin = require('./lockin');
+const dictate = require('./dictate');
+const jev = require('./jev');
 const path = require('path');
 const fs = require('fs');
 
@@ -611,11 +613,30 @@ ipcMain.handle('calendar:update', (_e, id, body) => calendar.updateEvent(id, bod
 ipcMain.handle('calendar:delete', (_e, id) => calendar.deleteEvent(id));
 
 /* Lock-in */
+ipcMain.handle('dictate:status', () => dictate.status());
+ipcMain.handle('dictate:request', () => dictate.requestAccess());
+ipcMain.handle('dictate:start', () =>
+  dictate.start((partial) => {
+    if (win) win.webContents.send('dictate-partial', partial);
+  })
+);
+ipcMain.handle('dictate:stop', () => dictate.stop());
+
+/// Classifies a transcript with Jev. The key lives in settings, never in the
+/// repo, and a failure here still lets the caller keep the raw words.
+ipcMain.handle('voice:classify', (_e, transcript) => {
+  const settings = settingsOf(appState);
+  return jev.classify(transcript, {
+    key: settings.jevKey,
+    labels: (appState && appState.labels) || [],
+  });
+});
+
 ipcMain.handle('sync:qr', async (_e, url) => {
   if (!url || !QRCode) return null;
   // Dark-on-light with a quiet zone — phone cameras need the contrast.
   return QRCode.toDataURL(url, { width: 360, margin: 2, errorCorrectionLevel: 'M',
-    color: { dark: '#141210', light: '#f0eadd' } }).catch(() => null);
+    color: { dark: '#171716', light: '#ffffff' } }).catch(() => null);
 });
 
 ipcMain.handle('lockin:status', () => lockin.status());
@@ -632,6 +653,7 @@ ipcMain.on('login-item:set', (_e, open) => {
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
   lockin.stop(false); // never leave a caffeinate assertion behind
+  dictate.shutdown(); // and never leave the mic open
   calendar.stop();
 });
 
