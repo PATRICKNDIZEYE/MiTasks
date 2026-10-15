@@ -1,50 +1,29 @@
 import Foundation
 import SwiftUI
 
-/// Where the widget lives on the network, plus the shared secret from its
-/// pairing URL.
-struct ServerConfig: Codable, Equatable {
-    var host: String   // e.g. "10.110.0.127:43917"
-    var key: String
-
-    var baseURL: URL? { URL(string: "http://\(host)") }
-
-    func url(_ path: String, query: [String: String] = [:]) -> URL? {
-        guard var comps = URLComponents(string: "http://\(host)\(path)") else { return nil }
-        var items = [URLQueryItem(name: "key", value: key)]
-        items += query.map { URLQueryItem(name: $0.key, value: $0.value) }
-        comps.queryItems = items
-        return comps.url
-    }
-
-    /// Accepts the pairing URL straight from the widget or the QR code,
-    /// e.g. http://10.110.0.127:43917/?key=abc123
-    static func parse(_ raw: String) -> ServerConfig? {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        let withScheme = trimmed.contains("://") ? trimmed : "http://\(trimmed)"
-        guard let comps = URLComponents(string: withScheme),
-              let host = comps.host,
-              let key = comps.queryItems?.first(where: { $0.name == "key" })?.value,
-              !key.isEmpty
-        else { return nil }
-        let port = comps.port ?? 43917
-        return ServerConfig(host: "\(host):\(port)", key: key)
-    }
-}
-
 @MainActor
 final class Store: ObservableObject {
-    @Published var state = AppState.empty
+    /// What the screens show: the Mac's last word with queued edits on top.
+    @Published private(set) var state = AppState.empty {
+        didSet { LiveSessions.sync(state) }
+    }
+    /// A screen something outside the app asked for; the Today tab consumes it.
+    @Published var route: AppRoute?
     @Published var connected = false
     @Published var config: ServerConfig?
     @Published var lastError: String?
+    /// Edits made while the Mac was out of reach, oldest first.
+    @Published private(set) var outbox: [PendingOp] = []
 
     /// Ticks once a second purely so the focus and lock-in countdowns move
     /// between server broadcasts.
     @Published var tick = Date()
 
+    /// The last state the Mac actually sent.
+    private var confirmed = AppState.empty
     private var streamTask: Task<Void, Never>?
     private var tickTimer: Timer?
+    private var flushing = false
     private let defaults = UserDefaults.standard
 
     init() {
@@ -56,8 +35,15 @@ final class Store: ObservableObject {
         // unreachable Mac still shows this morning's list.
         if let data = defaults.data(forKey: "cachedState"),
            let cached = try? JSONDecoder().decode(AppState.self, from: data) {
-            state = cached
+            confirmed = cached
         }
+        if let data = defaults.data(forKey: "outbox"),
+           let saved = try? JSONDecoder().decode([PendingOp].self, from: data) {
+            outbox = saved
+        }
+        // Installs from before the widgets existed have never told them where the Mac is.
+        if let config, WidgetBridge.loadConfig() == nil { WidgetBridge.saveConfig(config) }
+        rebuild()
         tickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick = Date() }
         }
@@ -70,10 +56,9 @@ final class Store: ObservableObject {
             lastError = "That doesn't look like a miTasks link."
             return false
         }
-        config = cfg
-        if let data = try? JSONEncoder().encode(cfg) {
-            defaults.set(data, forKey: "serverConfig")
-        }
+        // Queued edits belong to whichever Mac they were made against.
+        if cfg.key != config?.key { setOutbox([]) }
+        saveConfig(cfg)
         lastError = nil
         start()
         return true
@@ -84,26 +69,60 @@ final class Store: ObservableObject {
         streamTask = nil
         config = nil
         connected = false
+        setOutbox([])
         defaults.removeObject(forKey: "serverConfig")
+        WidgetBridge.saveConfig(nil)
+    }
+
+    private func saveConfig(_ cfg: ServerConfig) {
+        config = cfg
+        if let data = try? JSONEncoder().encode(cfg) {
+            defaults.set(data, forKey: "serverConfig")
+        }
+        WidgetBridge.saveConfig(cfg)
     }
 
     // MARK: - Lifecycle
 
     func start() {
         guard config != nil else { return }
-        Task { await refresh() }
+        absorbWidgetTicks()
         listen()
+    }
+
+    /// Coming back to the foreground: the stream is usually dead by now, so
+    /// re-read and push anything that queued up meanwhile.
+    func wake() async {
+        absorbWidgetTicks()
+        if await refresh() { await flush() }
+    }
+
+    /// Ticks made on a Home Screen widget while the Mac was out of reach join
+    /// the queue like any other edit.
+    private func absorbWidgetTicks() {
+        for tick in WidgetBridge.takeTicks() {
+            enqueue(.setDone(id: tick.id, done: true, at: tick.at))
+        }
     }
 
     private func listen() {
         streamTask?.cancel()
         streamTask = Task { [weak self] in
-            // Reconnects for as long as the view is alive; the Mac sleeping is
+            // Reconnects for as long as the app is alive; the Mac sleeping is
             // an expected, recoverable state rather than an error.
+            var backoff = 3.0
             while !Task.isCancelled {
-                await self?.streamOnce()
+                guard let self else { return }
+                if await self.refresh() {
+                    backoff = 3
+                    await self.learnEndpoints()
+                    await self.flush()
+                    await self.streamOnce()
+                } else {
+                    backoff = min(backoff * 2, 30)
+                }
                 if Task.isCancelled { break }
-                try? await Task.sleep(for: .seconds(3))
+                try? await Task.sleep(for: .seconds(backoff))
             }
         }
     }
@@ -111,7 +130,9 @@ final class Store: ObservableObject {
     private func streamOnce() async {
         guard let url = config?.url("/api/events") else { return }
         var req = URLRequest(url: url)
-        req.timeoutInterval = .infinity
+        // The server pings every 25s, so a minute of silence means the link
+        // is dead even if the socket hasn't noticed.
+        req.timeoutInterval = 60
         req.setValue("text/event-stream", forHTTPHeaderField: "Accept")
 
         do {
@@ -132,173 +153,250 @@ final class Store: ObservableObject {
         }
     }
 
-    func refresh() async {
-        guard let url = config?.url("/api/state") else { return }
-        do {
-            let (data, response) = try await URLSession.shared.data(from: url)
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-                connected = false
-                return
+    /// Reads the full state from the first address that answers, and makes
+    /// that address the one to use from now on.
+    @discardableResult
+    func refresh() async -> Bool {
+        guard let cfg = config else { return false }
+        for base in cfg.endpoints {
+            guard let url = cfg.url("/api/state", base: base) else { continue }
+            var req = URLRequest(url: url)
+            req.timeoutInterval = 6
+            guard let (data, response) = try? await URLSession.shared.data(for: req),
+                  (response as? HTTPURLResponse)?.statusCode == 200
+            else { continue }
+            if base != config?.endpoints.first, var moved = config {
+                moved.endpoints.removeAll { $0 == base }
+                moved.endpoints.insert(base, at: 0)
+                saveConfig(moved)
             }
             adopt(data)
             connected = true
-        } catch {
-            connected = false
+            return true
+        }
+        connected = false
+        return false
+    }
+
+    /// Asks the Mac for every address it has, so the phone can still find it
+    /// after leaving home Wi-Fi without pairing again.
+    private func learnEndpoints() async {
+        guard let cfg = config, let url = cfg.url("/api/hosts"),
+              let (data, response) = try? await URLSession.shared.data(from: url),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let hosts = json["hosts"] as? [String]
+        else { return }
+        var next = [cfg.endpoints[0]]
+        for h in hosts where !next.contains(h) && URL(string: h) != nil { next.append(h) }
+        if next != cfg.endpoints {
+            var updated = cfg
+            updated.endpoints = next
+            saveConfig(updated)
         }
     }
 
     private func adopt(_ data: Data) {
         guard let next = try? JSONDecoder().decode(AppState.self, from: data) else { return }
-        state = next
+        confirmed = next
         defaults.set(data, forKey: "cachedState")
+        rebuild()
+    }
+
+    /// Recomputes what the screens show from the Mac's state plus the queue.
+    private func rebuild() {
+        var s = confirmed
+        for op in outbox { op.change.apply(to: &s) }
+        state = s
+        WidgetBridge.publish(s, pending: outbox.count)
+    }
+
+    // MARK: - Outbox
+    //
+    // Task and note writes go through the queue: they show up instantly,
+    // survive the app being killed, and reach the Mac whenever it's reachable.
+
+    private func setOutbox(_ ops: [PendingOp]) {
+        outbox = ops
+        if let data = try? JSONEncoder().encode(ops) {
+            defaults.set(data, forKey: "outbox")
+        }
+    }
+
+    private func enqueue(_ change: Change) {
+        var ops = outbox
+        // Saving the same task or note twice only needs the last version. The
+        // replacement gets a fresh id, so a copy already in flight is never
+        // mistaken for it.
+        if let subject = change.subject, let last = ops.last, last.change.subject == subject,
+           sameKind(last.change, change) {
+            ops[ops.count - 1] = PendingOp(change: change)
+        } else {
+            ops.append(PendingOp(change: change))
+        }
+        setOutbox(ops)
+        rebuild()
+        Task { await flush() }
+    }
+
+    private func sameKind(_ a: Change, _ b: Change) -> Bool {
+        switch (a, b) {
+        case (.editTask, .editTask), (.editNote, .editNote): return true
+        default: return false
+        }
+    }
+
+    private enum Delivery { case done, rejected, unreachable }
+
+    /// Sends queued writes one at a time, in order, stopping at the first one
+    /// the Mac can't be reached for.
+    func flush() async {
+        guard !flushing, config != nil, !outbox.isEmpty else { return }
+        flushing = true
+        defer { flushing = false }
+
+        var sent = false
+        while let op = outbox.first {
+            let result = await deliver(op)
+            if result == .unreachable { break }
+            // Something newer may have replaced it while it was in flight.
+            if outbox.first?.id == op.id { setOutbox(Array(outbox.dropFirst())) }
+            if result == .rejected { rebuild() }
+            sent = true
+        }
+        // Without a live stream nobody will tell us what the Mac made of it.
+        if sent && !connected { await refresh() }
+    }
+
+    private func deliver(_ op: PendingOp) async -> Delivery {
+        let (path, method, body) = op.change.request
+        guard let url = config?.url(path) else { return .unreachable }
+        var req = URLRequest(url: url)
+        req.httpMethod = method
+        req.timeoutInterval = 10
+        if let body {
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        }
+        guard let (_, response) = try? await URLSession.shared.data(for: req),
+              let http = response as? HTTPURLResponse
+        else { return .unreachable }
+        switch http.statusCode {
+        case ..<400: return .done
+        // A wrong key or a struggling server is worth retrying; a 404 means
+        // the Mac deleted the thing first, and the Mac wins.
+        case 403, 500...: return .unreachable
+        default: return .rejected
+        }
     }
 
     // MARK: - Writes
-    //
-    // Every write is optimistic: mutate locally so the tap lands instantly,
-    // then let the server's broadcast reconcile. A failure re-reads state.
 
-    private func send(_ path: String, method: String, body: [String: Any]? = nil) {
-        guard let url = config?.url(path) else { return }
+    func toggle(_ task: TaskItem) {
+        let current = state.tasks.first { $0.id == task.id }?.done ?? task.done
+        enqueue(.setDone(id: task.id, done: !current, at: nowMs))
+    }
+
+    func add(_ draft: QuickAdd) {
+        enqueue(.addTask(TaskItem(
+            id: makeId(), text: draft.text, label: draft.label,
+            done: false, createdAt: nowMs, doneAt: nil,
+            notes: "", priority: draft.priority, due: draft.due,
+            startAt: draft.startAt, repeatRule: draft.repeatRule, focusedMs: 0
+        )))
+    }
+
+    func update(_ task: TaskItem, changes: [String: Any]) {
+        enqueue(.editTask(id: task.id, edit: TaskEdit(
+            text: changes["text"] as? String,
+            notes: changes["notes"] as? String,
+            priority: changes["priority"] as? String,
+            label: changes["label"] as? String,
+            due: changes["due"] as? String,
+            startAt: changes["startAt"] as? String,
+            repeatRule: changes["repeat"] as? String
+        )))
+    }
+
+    func delete(_ task: TaskItem) {
+        enqueue(.deleteTask(id: task.id))
+    }
+
+    func clearDone() {
+        enqueue(.clearDone)
+    }
+
+    func saveNote(_ note: NoteItem, title: String, body: String) {
+        enqueue(.editNote(id: note.id, title: title, body: body, at: nowMs))
+    }
+
+    func deleteNote(_ note: NoteItem) {
+        enqueue(.deleteNote(id: note.id))
+    }
+
+    /// The phone names the note itself, so the editor can open straight away
+    /// even when the Mac is out of reach.
+    func createNote(label: String?, title: String = "Untitled") -> NoteItem {
+        let note = NoteItem(id: makeId(), label: label, title: title, body: "", createdAt: nowMs, updatedAt: nowMs)
+        enqueue(.addNote(note))
+        return note
+    }
+
+    // Focus and lock-in act on the Mac right now, so they aren't queued: a
+    // lock-in replayed hours later would be wrong. If the Mac can't be
+    // reached, the optimistic change is rolled back.
+
+    private func sendLive(_ path: String, method: String, body: [String: Any]? = nil) {
+        guard let url = config?.url(path) else { rebuild(); return }
         var req = URLRequest(url: url)
         req.httpMethod = method
+        req.timeoutInterval = 10
         if let body {
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
             req.httpBody = try? JSONSerialization.data(withJSONObject: body)
         }
         Task {
-            do {
-                let (_, response) = try await URLSession.shared.data(for: req)
-                if let http = response as? HTTPURLResponse, http.statusCode >= 400 {
-                    await refresh()
-                }
-            } catch {
+            let ok = (try? await URLSession.shared.data(for: req))
+                .flatMap { ($0.1 as? HTTPURLResponse)?.statusCode }
+                .map { $0 < 400 } ?? false
+            if !ok {
+                lastError = "Your Mac isn't reachable — focus and lock-in need it online."
+                rebuild()
                 await refresh()
             }
         }
-    }
-
-    func toggle(_ task: TaskItem) {
-        if let i = state.tasks.firstIndex(where: { $0.id == task.id }) {
-            state.tasks[i].done.toggle()
-            state.tasks[i].doneAt = state.tasks[i].done ? Date().timeIntervalSince1970 * 1000 : nil
-        }
-        send("/api/tasks/\(task.id)/toggle", method: "POST")
-    }
-
-    func add(_ draft: QuickAdd) {
-        var body: [String: Any] = ["text": draft.text]
-        if let v = draft.label { body["label"] = v }
-        if let v = draft.priority { body["priority"] = v }
-        if let v = draft.due { body["due"] = v }
-        if let v = draft.startAt { body["startAt"] = v }
-        if let v = draft.repeatRule { body["repeat"] = v }
-
-        let optimistic = TaskItem(
-            id: "tmp-\(UUID().uuidString)", text: draft.text, label: draft.label,
-            done: false, createdAt: Date().timeIntervalSince1970 * 1000, doneAt: nil,
-            notes: "", priority: draft.priority, due: draft.due,
-            startAt: draft.startAt, repeatRule: draft.repeatRule, focusedMs: 0
-        )
-        state.tasks.insert(optimistic, at: 0)
-        send("/api/tasks", method: "POST", body: body)
-    }
-
-    func update(_ task: TaskItem, changes: [String: Any]) {
-        if let i = state.tasks.firstIndex(where: { $0.id == task.id }) {
-            var t = state.tasks[i]
-            if let v = changes["text"] as? String { t.text = v }
-            if let v = changes["notes"] as? String { t.notes = v }
-            t.priority = changes["priority"] as? String
-            t.label = changes["label"] as? String
-            t.due = changes["due"] as? String
-            t.startAt = changes["startAt"] as? String
-            t.repeatRule = changes["repeat"] as? String
-            state.tasks[i] = t
-        }
-        // NSNull marks "clear this field" — JSONSerialization turns it into null,
-        // which the server reads as an explicit reset rather than "unchanged".
-        var body: [String: Any] = [:]
-        for key in ["text", "notes", "priority", "label", "due", "startAt", "repeat"] {
-            body[key] = changes[key] ?? NSNull()
-        }
-        send("/api/tasks/\(task.id)", method: "PATCH", body: body)
-    }
-
-    func delete(_ task: TaskItem) {
-        state.tasks.removeAll { $0.id == task.id }
-        send("/api/tasks/\(task.id)", method: "DELETE")
-    }
-
-    func clearDone() {
-        state.tasks.removeAll { $0.done }
-        send("/api/clear-done", method: "POST")
     }
 
     func startFocus(_ task: TaskItem) {
         let minutes = state.focusMinutes
         state.focus = FocusSession(
             taskId: task.id,
-            startedAt: Date().timeIntervalSince1970 * 1000,
+            startedAt: nowMs,
             endAt: Date().addingTimeInterval(Double(minutes) * 60).timeIntervalSince1970 * 1000,
             minutes: minutes
         )
-        send("/api/focus", method: "POST", body: ["taskId": task.id])
+        sendLive("/api/focus", method: "POST", body: ["taskId": task.id])
     }
 
     func stopFocus() {
         state.focus = nil
-        send("/api/focus", method: "DELETE")
+        sendLive("/api/focus", method: "DELETE")
     }
 
     func startLockin(minutes: Int, extend: Bool = false) {
         let base = extend && state.lockin.active ? state.lockin.remaining : 0
         state.lockin = LockinStatus(
             active: true,
-            startedAt: Date().timeIntervalSince1970 * 1000,
+            startedAt: nowMs,
             endAt: Date().addingTimeInterval(base + Double(minutes) * 60).timeIntervalSince1970 * 1000,
             minutes: minutes
         )
-        send("/api/lockin", method: "POST", body: ["minutes": minutes, "extend": extend])
+        sendLive("/api/lockin", method: "POST", body: ["minutes": minutes, "extend": extend])
     }
 
     func stopLockin() {
         state.lockin = .off
-        send("/api/lockin", method: "DELETE")
-    }
-
-    func saveNote(_ note: NoteItem, title: String, body: String) {
-        if let i = state.notes.firstIndex(where: { $0.id == note.id }) {
-            state.notes[i].title = title
-            state.notes[i].body = body
-            state.notes[i].updatedAt = Date().timeIntervalSince1970 * 1000
-        }
-        send("/api/notes/\(note.id)", method: "PATCH", body: ["title": title, "body": body])
-    }
-
-    func deleteNote(_ note: NoteItem) {
-        state.notes.removeAll { $0.id == note.id }
-        send("/api/notes/\(note.id)", method: "DELETE")
-    }
-
-    /// Creating a note needs the server's id back before the editor can open,
-    /// so this one write is not optimistic.
-    func createNote(label: String?) async -> NoteItem? {
-        guard let url = config?.url("/api/notes") else { return nil }
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        var body: [String: Any] = ["title": "Untitled"]
-        if let label { body["label"] = label }
-        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
-
-        guard let (data, _) = try? await URLSession.shared.data(for: req),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let id = json["id"] as? String
-        else { return nil }
-
-        await refresh()
-        return state.notes.first { $0.id == id }
+        sendLive("/api/lockin", method: "DELETE")
     }
 
     // MARK: - Voice
@@ -319,6 +417,7 @@ final class Store: ObservableObject {
         }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
+        req.timeoutInterval = 20
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try? JSONSerialization.data(withJSONObject: ["transcript": transcript])
 
@@ -338,17 +437,14 @@ final class Store: ObservableObject {
     }
 
     /// Saves a spoken sentence. Whatever the classifier says, the words
-    /// themselves are never lost — a failed call just means an unlabelled task.
+    /// themselves are never lost — offline, or on a failed call, it simply
+    /// becomes an unlabelled task.
     func saveSpoken(_ spoken: String, verdict: Verdict) {
         let parsed = QuickAdd.parse(spoken, labels: state.labels, activeLabel: nil)
         let text = parsed.text.isEmpty ? spoken : parsed.text
 
         if verdict.ok && verdict.kind == "note" {
-            Task {
-                if let note = await createNote(label: verdict.label) {
-                    saveNote(note, title: String(text.prefix(120)), body: "")
-                }
-            }
+            _ = createNote(label: verdict.label, title: String(text.prefix(120)))
             return
         }
 

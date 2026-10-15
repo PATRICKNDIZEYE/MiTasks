@@ -524,6 +524,7 @@ app.whenReady().then(() => {
     },
     getCalendar: () => calendar.snapshot(),
     lockin,
+    publicUrl: () => fileSettings.publicUrl,
   });
 
   // Lock-in and the agenda both feed the menu bar, so they wire up together.

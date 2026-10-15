@@ -13,6 +13,19 @@ const MIME = {
 };
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+// Phones queue writes while the Mac is out of reach and replay them later, so
+// they mint their own ids (same shape as uid) and stamp when things happened.
+const CLIENT_ID = /^[a-z0-9]{6,32}$/i;
+const clientId = (v) => (typeof v === 'string' && CLIENT_ID.test(v) ? v : null);
+
+/// A client's timestamp, if it is plausible; otherwise now. A queued tick
+/// from this morning should still count for this morning.
+function clientTime(v) {
+  const now = Date.now();
+  const n = Number(v);
+  return Number.isFinite(n) && n > now - 30 * 86400000 && n <= now + 5 * 60000 ? Math.min(n, now) : now;
+}
 const LABEL_COLORS = ['#7d9bb8', '#8fa876', '#c97b5a', '#d9a441', '#a98ba8', '#6fa39c', '#b8a06a', '#94a0ab'];
 
 function pad(n) {
@@ -69,24 +82,31 @@ function spawnNextOccurrence(state, task) {
   state.tasks.unshift(next);
 }
 
-function detectUrls(port, token) {
-  const urls = { lan: null, tailscale: null };
+/// Every base address this Mac answers on, keyless: { lan, tailscale }.
+function detectBases(port) {
+  const bases = { lan: null, tailscale: null };
   const ifaces = os.networkInterfaces();
   for (const name of Object.keys(ifaces)) {
     for (const addr of ifaces[name] || []) {
       if (addr.family !== 'IPv4' || addr.internal) continue;
       const ip = addr.address;
       if (ip.startsWith('100.')) {
-        urls.tailscale = `http://${ip}:${port}/?key=${token}`;
+        bases.tailscale = `http://${ip}:${port}`;
       } else if (/^(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(ip)) {
-        if (!urls.lan) urls.lan = `http://${ip}:${port}/?key=${token}`;
+        if (!bases.lan) bases.lan = `http://${ip}:${port}`;
       }
     }
   }
-  return urls;
+  return bases;
 }
 
-function startSyncServer({ port, token, getState, commit, getCalendar, lockin }) {
+function detectUrls(port, token) {
+  const bases = detectBases(port);
+  const withKey = (b) => (b ? `${b}/?key=${token}` : null);
+  return { lan: withKey(bases.lan), tailscale: withKey(bases.tailscale) };
+}
+
+function startSyncServer({ port, token, getState, commit, getCalendar, lockin, publicUrl }) {
   const clients = new Set();
 
   const publicState = () => {
@@ -100,7 +120,8 @@ function startSyncServer({ port, token, getState, commit, getCalendar, lockin })
       // The phone gets the agenda read-only; writes still go through the Mac.
       events: (getCalendar ? getCalendar().events : []) || [],
       lockin: lockin ? lockin.status() : { active: false },
-      settings: state.settings || {},
+      // Everything but secrets: the Jev key stays on the Mac.
+      settings: { ...(state.settings || {}), jevKey: undefined },
       focusLog: Array.isArray(state.focusLog) ? state.focusLog : [],
     };
   };
@@ -190,6 +211,16 @@ function startSyncServer({ port, token, getState, commit, getCalendar, lockin })
       return;
     }
 
+    // Every address the phone can try, best first. It keeps whichever answers,
+    // so leaving the house's Wi-Fi doesn't mean re-pairing.
+    if (p === '/api/hosts' && req.method === 'GET') {
+      const bases = detectBases(port);
+      const pub = publicUrl && publicUrl();
+      const hosts = [pub ? String(pub).replace(/\/+$/, '') : null, bases.lan, bases.tailscale].filter(Boolean);
+      sendJson(res, 200, { hosts });
+      return;
+    }
+
     if (p === '/api/events' && req.method === 'GET') {
       res.writeHead(200, {
         'Content-Type': 'text/event-stream',
@@ -210,10 +241,13 @@ function startSyncServer({ port, token, getState, commit, getCalendar, lockin })
       const text = String(body.text || '').trim().slice(0, 300);
       if (!text) { sendJson(res, 400, { error: 'text required' }); return; }
       const state = getState();
+      const id = clientId(body.id);
+      // A replayed create the Mac already has is a success, not a duplicate.
+      if (id && state.tasks.some((t) => t.id === id)) { sendJson(res, 200, { ok: true, id }); return; }
       const label = state.labels.some((l) => l.name === body.label) ? body.label : null;
       state.tasks.unshift({
-        id: uid(), text, label,
-        done: false, createdAt: Date.now(), doneAt: null,
+        id: id || uid(), text, label,
+        done: false, createdAt: clientTime(body.createdAt), doneAt: null,
         notes: '',
         priority: ['med', 'high'].includes(body.priority) ? body.priority : null,
         due: /^\d{4}-\d{2}-\d{2}$/.test(body.due || '') ? body.due : null,
@@ -284,13 +318,16 @@ function startSyncServer({ port, token, getState, commit, getCalendar, lockin })
       const body = await readBody(req);
       const state = getState();
       if (!Array.isArray(state.notes)) state.notes = [];
+      const id = clientId(body.id);
+      if (id && state.notes.some((n) => n.id === id)) { sendJson(res, 200, { ok: true, id }); return; }
+      const createdAt = clientTime(body.createdAt);
       const note = {
-        id: uid(),
+        id: id || uid(),
         label: state.labels.some((l) => l.name === body.label) ? body.label : null,
         title: String(body.title || '').slice(0, 120),
-        body: '',
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+        body: String(body.body || '').slice(0, 20000),
+        createdAt,
+        updatedAt: createdAt,
       };
       state.notes.push(note);
       commit(state);
@@ -386,12 +423,16 @@ function startSyncServer({ port, token, getState, commit, getCalendar, lockin })
 
     m = p.match(/^\/api\/tasks\/(\w+)\/toggle$/);
     if (m && req.method === 'POST') {
+      const body = await readBody(req);
       const state = getState();
       const task = state.tasks.find((t) => t.id === m[1]);
       if (!task) { sendJson(res, 404, { error: 'not found' }); return; }
-      task.done = !task.done;
-      task.doneAt = task.done ? Date.now() : null;
-      if (task.done && task.repeat) spawnNextOccurrence(state, task);
+      // An explicit `done` makes a replayed tick safe; without it, flip.
+      const done = typeof body.done === 'boolean' ? body.done : !task.done;
+      if (done === task.done) { sendJson(res, 200, { ok: true }); return; }
+      task.done = done;
+      task.doneAt = done ? clientTime(body.at) : null;
+      if (done && task.repeat) spawnNextOccurrence(state, task);
       commit(state);
       broadcast();
       sendJson(res, 200, { ok: true });

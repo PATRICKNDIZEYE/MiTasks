@@ -156,9 +156,7 @@ struct NotesView: View {
             VStack(alignment: .leading, spacing: 0) {
                 SectionHead(title: "Notes", count: notes.count) {
                     Button("New note") {
-                        Task {
-                            if let created = await store.createNote(label: filter) { editing = created }
-                        }
+                        editing = store.createNote(label: filter)
                     }
                     .buttonStyle(.crew(.chip, height: 26))
                 }
@@ -521,7 +519,14 @@ struct SettingsView: View {
                     }
                     .padding(.top, Theme.Space.s6)
 
-                    Text("Your Mac's address can change when it reconnects to Wi-Fi. If the app stops syncing, disconnect and scan the widget's code again.")
+                    if !store.outbox.isEmpty {
+                        Text("\(store.outbox.count) change\(store.outbox.count == 1 ? "" : "s") waiting to sync")
+                            .font(Theme.text(Theme.Size.s))
+                            .foregroundStyle(Theme.amber)
+                            .padding(.top, Theme.Space.s6)
+                    }
+
+                    Text("The app tries every address your Mac has — its public link, home Wi‑Fi and Tailscale — and keeps anything you change offline until one of them answers.")
                         .font(Theme.text(Theme.Size.s))
                         .foregroundStyle(Theme.muted)
                         .lineSpacing(Theme.Space.xxs)
