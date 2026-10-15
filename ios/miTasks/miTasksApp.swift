@@ -54,7 +54,18 @@ struct RootView: View {
         .onChange(of: phase) { _, new in
             // Coming back from the background, the SSE stream is usually dead;
             // a plain re-read is the cheapest way to resync.
-            if new == .active { Task { await store.refresh() } }
+            guard new == .active else { return }
+            Task { await store.wake() }
+            if let route = WidgetBridge.takeRoute() { store.route = route }
+        }
+        // Widget rows link straight to a task; controls and Siri hand over a
+        // route through the App Group.
+        .onOpenURL { url in store.route = AppRoute(url: url) }
+        .onReceive(NotificationCenter.default.publisher(for: .miTasksRoute)) { _ in
+            if let route = WidgetBridge.takeRoute() { store.route = route }
+        }
+        .onChange(of: store.route) { _, route in
+            if route != nil { tab = .today }
         }
     }
 
@@ -113,7 +124,9 @@ struct Screen<Meta: View, Trailing: View, Content: View>: View {
                         StatusStrip(
                             tint: Theme.red,
                             fill: Theme.redBg,
-                            title: "Showing the last synced copy — your Mac isn't reachable.",
+                            title: store.outbox.isEmpty
+                                ? "Showing the last synced copy — your Mac isn't reachable."
+                                : "Offline — \(store.outbox.count) change\(store.outbox.count == 1 ? "" : "s") will sync when your Mac is back.",
                             lines: 2
                         ) { EmptyView() }
                         .foregroundStyle(Theme.ink2)
